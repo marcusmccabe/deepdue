@@ -12,6 +12,7 @@ import {
   type CHOfficer,
   type CHFiling,
 } from "@/lib/companies-house";
+import AIAnalysisCard from "@/components/AIAnalysisCard";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -182,15 +183,6 @@ export default async function CompanyPage({
 
   const chWebUrl = `https://find-and-update.company-information.service.gov.uk/company/${companyNumber}`;
 
-  // AI insights placeholder rows (same design as dashboard)
-  const AI_PLACEHOLDERS = [
-    {
-      borderColor: "#e2e8f0",
-      bg: "#f8fafc",
-      title: "📄 Analysis pending",
-      body: "AI document analysis will be connected in the next session. Once enabled, Claude will extract going-concern notes, audit warnings, cyber incidents and director instability signals from filed accounts.",
-    },
-  ];
 
   return (
     <div
@@ -553,77 +545,8 @@ export default async function CompanyPage({
               )}
             </div>
 
-            {/* AI Document Intelligence — placeholder */}
-            <div style={CARD}>
-              <div style={CARD_HEADER}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div
-                    style={{
-                      width: "22px",
-                      height: "22px",
-                      backgroundColor: "#4f46e5",
-                      borderRadius: "5px",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div>
-                    <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>
-                      AI Document Intelligence
-                    </div>
-                    <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "1px" }}>
-                      Extracted from filed accounts
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    padding: "4px 10px",
-                    backgroundColor: "rgba(79,70,229,0.08)",
-                    color: "#4f46e5",
-                    borderRadius: "100px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Coming soon
-                </span>
-              </div>
-
-              <div style={{ padding: "14px 18px" }}>
-                {AI_PLACEHOLDERS.map((insight) => (
-                  <div
-                    key={insight.title}
-                    style={{
-                      borderLeft: `3px solid ${insight.borderColor}`,
-                      backgroundColor: insight.bg,
-                      borderRadius: "0 8px 8px 0",
-                      padding: "14px 18px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: "700",
-                        color: "#0f172a",
-                        marginBottom: "5px",
-                      }}
-                    >
-                      {insight.title}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        color: "#475569",
-                        lineHeight: "1.6",
-                      }}
-                    >
-                      {insight.body}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* AI Document Intelligence */}
+            <AIAnalysisCard companyNumber={companyNumber} />
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}
