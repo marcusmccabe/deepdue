@@ -13,6 +13,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const path = searchParams.get("path");
 
+  // Diagnostic — visible in Vercel function logs
+  const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
+  console.log(
+    "[companies-house] API key present:",
+    !!key,
+    "| length:",
+    key.length
+  );
+
   if (!path || !path.startsWith("/")) {
     return NextResponse.json({ error: "Invalid or missing path" }, { status: 400 });
   }
@@ -27,14 +36,16 @@ export async function GET(request: NextRequest) {
     `${BASE_URL}${path}` +
     (forwarded.toString() ? `?${forwarded.toString()}` : "");
 
-  const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
-  const auth = "Basic " + Buffer.from(`${key}:`).toString("base64");
+  const credentials = Buffer.from(`${key}:`).toString("base64");
+  const auth = `Basic ${credentials}`;
 
   try {
     const res = await fetch(chUrl, {
       headers: { Authorization: auth },
       cache: "no-store",
     });
+
+    console.log("[companies-house] CH response status:", res.status, "for", path);
 
     // Mirror the status code so callers can handle 404, 429, etc.
     const data = await res.json();
