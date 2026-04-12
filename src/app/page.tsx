@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HeroSearch from "@/components/HeroSearch";
 
 export default function LandingPage() {
   return (
@@ -157,11 +158,11 @@ export default function LandingPage() {
               display: "flex",
               gap: "12px",
               justifyContent: "center",
-              marginBottom: "52px",
+              marginBottom: "32px",
             }}
           >
             <Link
-              href="/login"
+              href="/dashboard"
               style={{
                 display: "inline-block",
                 padding: "12px 24px",
@@ -189,6 +190,17 @@ export default function LandingPage() {
             >
               See demo
             </a>
+          </div>
+
+          {/* Hero search */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: "44px",
+            }}
+          >
+            <HeroSearch />
           </div>
 
           {/* Stats row */}
