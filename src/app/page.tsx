@@ -100,7 +100,7 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section
         style={{
-          padding: "100px 32px 88px",
+          padding: "140px 32px 120px",
           textAlign: "center",
         }}
       >
@@ -265,7 +265,7 @@ export default function LandingPage() {
           borderTop: "1px solid #e2e8f0",
           borderBottom: "1px solid #e2e8f0",
           backgroundColor: "#ffffff",
-          padding: "80px 32px",
+          padding: "100px 32px",
         }}
       >
         <div
@@ -274,11 +274,33 @@ export default function LandingPage() {
             margin: "0 auto",
             display: "grid",
             gridTemplateColumns: "1fr 1fr 1fr",
-            gap: "56px",
+            gap: "32px",
           }}
         >
           {/* Column 1 */}
-          <div>
+          <div
+            style={{
+              padding: "32px",
+              border: "1px solid #e2e8f0",
+              borderRadius: "12px",
+              backgroundColor: "#f8fafc",
+            }}
+          >
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                backgroundColor: "rgba(79,70,229,0.1)",
+                borderRadius: "10px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "18px",
+                marginBottom: "20px",
+              }}
+            >
+              ✦
+            </div>
             <h3
               style={{
                 fontSize: "16px",
@@ -287,7 +309,7 @@ export default function LandingPage() {
                 marginBottom: "12px",
               }}
             >
-              ✦ AI Document Analysis
+              AI Document Analysis
             </h3>
             <p
               style={{
@@ -302,7 +324,29 @@ export default function LandingPage() {
           </div>
 
           {/* Column 2 */}
-          <div>
+          <div
+            style={{
+              padding: "32px",
+              border: "1px solid #e2e8f0",
+              borderRadius: "12px",
+              backgroundColor: "#f8fafc",
+            }}
+          >
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                backgroundColor: "rgba(79,70,229,0.1)",
+                borderRadius: "10px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "18px",
+                marginBottom: "20px",
+              }}
+            >
+              📊
+            </div>
             <h3
               style={{
                 fontSize: "16px",
@@ -311,7 +355,7 @@ export default function LandingPage() {
                 marginBottom: "12px",
               }}
             >
-              📊 Clean Financials
+              Clean Financials
             </h3>
             <p
               style={{
@@ -326,7 +370,29 @@ export default function LandingPage() {
           </div>
 
           {/* Column 3 */}
-          <div>
+          <div
+            style={{
+              padding: "32px",
+              border: "1px solid #e2e8f0",
+              borderRadius: "12px",
+              backgroundColor: "#f8fafc",
+            }}
+          >
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                backgroundColor: "rgba(79,70,229,0.1)",
+                borderRadius: "10px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "18px",
+                marginBottom: "20px",
+              }}
+            >
+              🔔
+            </div>
             <h3
               style={{
                 fontSize: "16px",
@@ -335,7 +401,7 @@ export default function LandingPage() {
                 marginBottom: "12px",
               }}
             >
-              🔔 Live Monitoring
+              Live Monitoring
             </h3>
             <p
               style={{

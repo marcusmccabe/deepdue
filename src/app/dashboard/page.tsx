@@ -128,16 +128,28 @@ export default function DashboardPage() {
                 fontSize: "13px",
                 cursor: "pointer",
                 borderLeft: item.active
-                  ? "3px solid #4f46e5"
-                  : "3px solid transparent",
+                  ? "4px solid #4338ca"
+                  : "4px solid transparent",
                 backgroundColor: item.active
-                  ? "rgba(79,70,229,0.08)"
+                  ? "rgba(79,70,229,0.12)"
                   : "transparent",
-                color: item.active ? "#4f46e5" : "#475569",
+                color: item.active ? "#4338ca" : "#475569",
                 fontWeight: item.active ? "600" : "400",
               }}
             >
-              <span style={{ fontSize: "15px" }}>{item.icon}</span>
+              <span
+                style={{
+                  fontSize: "15px",
+                  width: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  lineHeight: "1",
+                }}
+              >
+                {item.icon}
+              </span>
               <span>{item.label}</span>
             </div>
           ))}
@@ -301,8 +313,8 @@ export default function DashboardPage() {
               </div>
               <div
                 style={{
-                  fontSize: "26px",
-                  fontWeight: "700",
+                  fontSize: "32px",
+                  fontWeight: "800",
                   color: "#0f172a",
                   lineHeight: "1",
                   marginBottom: "4px",
