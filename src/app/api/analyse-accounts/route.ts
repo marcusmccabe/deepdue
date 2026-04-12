@@ -10,9 +10,8 @@ const CH_DOC_BASE = "https://document-api.company-information.service.gov.uk";
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20 MB
 
-// Exact system prompt as specified
 const SYSTEM_PROMPT =
-  "You are a financial analyst specialising in UK company accounts. Analyse the provided accounts document and extract the following in JSON format only, no other text: { risks: [ { severity: 'high' | 'medium' | 'low', title: string, detail: string } ], financials: { revenue: number | null, profit: number | null, assets: number | null, liabilities: number | null, employees: number | null, currency: string }, summary: string, auditOpinion: 'clean' | 'qualified' | 'adverse' | 'disclaimer' | 'unknown', goingConcern: boolean, keyEvents: string[] }";
+  "You are a senior financial analyst and forensic accountant specialising in UK company accounts. Analyse the provided accounts document thoroughly including all notes, the directors report, auditor report, cash flow statement, and balance sheet. Extract the following in JSON format only, no other text, no markdown, no code blocks:\n{\nrisks: [ { severity: 'high' | 'medium' | 'low', title: string, detail: string } ],\nfinancials: {\nrevenue: number | null,\nprofit: number | null,\ngrossProfit: number | null,\noperatingProfit: number | null,\nassets: number | null,\nliabilities: number | null,\nnetAssets: number | null,\ncash: number | null,\ndebt: number | null,\nemployees: number | null,\ncurrency: string,\nperiodEnd: string | null\n},\npriorYearFinancials: {\nrevenue: number | null,\nprofit: number | null,\nassets: number | null,\nliabilities: number | null,\ncash: number | null\n} | null,\nsummary: string,\nauditOpinion: 'clean' | 'qualified' | 'adverse' | 'disclaimer' | 'unknown',\nauditorName: string | null,\nauditorChanged: boolean | null,\ngoingConcern: boolean,\ngoingConcernDetail: string | null,\ngoingConcernRunwayMonths: number | null,\ndirectorLoans: {\npresent: boolean,\ndetail: string | null,\ntotalValue: number | null\n},\nrelatedPartyTransactions: {\npresent: boolean,\ndetail: string | null\n},\nlegalProceedings: {\npresent: boolean,\ndetail: string | null\n},\ncyberOrOperationalRisk: {\npresent: boolean,\ndetail: string | null\n},\ncashFlowAnalysis: {\noperatingCashFlow: number | null,\nfreeCashFlow: number | null,\ncashBurnMonthly: number | null,\ncashRunwayMonths: number | null,\ndetail: string\n},\nrevenueConcentration: {\nconcentrated: boolean | null,\ndetail: string | null\n},\nmanagementSentiment: 'positive' | 'cautious' | 'negative' | 'mixed' | 'unknown',\nmanagementSentimentDetail: string | null,\nyearOnYearNarrative: string | null,\nkeyEvents: string[],\nemphasisOfMatter: string | null,\nsectorBenchmarkCommentary: string | null\n}";
 
 function chAuth(): string {
   const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
@@ -152,7 +151,7 @@ export async function GET(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -215,15 +214,67 @@ export async function GET(request: NextRequest) {
       financials: {
         revenue: parsed.financials?.revenue ?? null,
         profit: parsed.financials?.profit ?? null,
+        grossProfit: parsed.financials?.grossProfit ?? null,
+        operatingProfit: parsed.financials?.operatingProfit ?? null,
         assets: parsed.financials?.assets ?? null,
         liabilities: parsed.financials?.liabilities ?? null,
+        netAssets: parsed.financials?.netAssets ?? null,
+        cash: parsed.financials?.cash ?? null,
+        debt: parsed.financials?.debt ?? null,
         employees: parsed.financials?.employees ?? null,
         currency: parsed.financials?.currency ?? "GBP",
+        periodEnd: parsed.financials?.periodEnd ?? null,
       },
+      priorYearFinancials: parsed.priorYearFinancials
+        ? {
+            revenue: parsed.priorYearFinancials.revenue ?? null,
+            profit: parsed.priorYearFinancials.profit ?? null,
+            assets: parsed.priorYearFinancials.assets ?? null,
+            liabilities: parsed.priorYearFinancials.liabilities ?? null,
+            cash: parsed.priorYearFinancials.cash ?? null,
+          }
+        : null,
       summary: parsed.summary ?? "",
       auditOpinion: parsed.auditOpinion ?? "unknown",
+      auditorName: parsed.auditorName ?? null,
+      auditorChanged: parsed.auditorChanged ?? null,
       goingConcern: parsed.goingConcern ?? false,
+      goingConcernDetail: parsed.goingConcernDetail ?? null,
+      goingConcernRunwayMonths: parsed.goingConcernRunwayMonths ?? null,
+      directorLoans: {
+        present: parsed.directorLoans?.present ?? false,
+        detail: parsed.directorLoans?.detail ?? null,
+        totalValue: parsed.directorLoans?.totalValue ?? null,
+      },
+      relatedPartyTransactions: {
+        present: parsed.relatedPartyTransactions?.present ?? false,
+        detail: parsed.relatedPartyTransactions?.detail ?? null,
+      },
+      legalProceedings: {
+        present: parsed.legalProceedings?.present ?? false,
+        detail: parsed.legalProceedings?.detail ?? null,
+      },
+      cyberOrOperationalRisk: {
+        present: parsed.cyberOrOperationalRisk?.present ?? false,
+        detail: parsed.cyberOrOperationalRisk?.detail ?? null,
+      },
+      cashFlowAnalysis: {
+        operatingCashFlow: parsed.cashFlowAnalysis?.operatingCashFlow ?? null,
+        freeCashFlow: parsed.cashFlowAnalysis?.freeCashFlow ?? null,
+        cashBurnMonthly: parsed.cashFlowAnalysis?.cashBurnMonthly ?? null,
+        cashRunwayMonths: parsed.cashFlowAnalysis?.cashRunwayMonths ?? null,
+        detail: parsed.cashFlowAnalysis?.detail ?? "",
+      },
+      revenueConcentration: {
+        concentrated: parsed.revenueConcentration?.concentrated ?? null,
+        detail: parsed.revenueConcentration?.detail ?? null,
+      },
+      managementSentiment: parsed.managementSentiment ?? "unknown",
+      managementSentimentDetail: parsed.managementSentimentDetail ?? null,
+      yearOnYearNarrative: parsed.yearOnYearNarrative ?? null,
       keyEvents: parsed.keyEvents ?? [],
+      emphasisOfMatter: parsed.emphasisOfMatter ?? null,
+      sectorBenchmarkCommentary: parsed.sectorBenchmarkCommentary ?? null,
       analysedAt: new Date().toISOString(),
       companyNumber,
       documentDate: filing.date,
