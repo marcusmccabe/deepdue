@@ -435,7 +435,7 @@ export default async function CompanyPage({
                             textTransform: "capitalize",
                           }}
                         >
-                          {officer.officer_role.replace(/-/g, " ")}
+                          {(officer.officer_role ?? "officer").replace(/-/g, " ")}
                         </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
@@ -523,7 +523,7 @@ export default async function CompanyPage({
                               fontFamily: "'Courier New', monospace",
                             }}
                           >
-                            {filing.type}
+                            {filing.type ?? "—"}
                           </span>
                           <span style={{ fontSize: "11px", color: "#cbd5e1" }}>·</span>
                           <span style={{ fontSize: "11px", color: "#94a3b8" }}>

@@ -58,8 +58,8 @@ export interface CHCompany {
 
 export interface CHOfficer {
   name: string;
-  officer_role: string;
-  appointed_on: string;
+  officer_role?: string;
+  appointed_on?: string;
   resigned_on?: string;
   nationality?: string;
   occupation?: string;
@@ -75,10 +75,10 @@ export interface CHOfficersResponse {
 }
 
 export interface CHFiling {
-  date: string;
-  description: string;
+  date?: string;
+  description?: string;
   description_values?: Record<string, string>;
-  type: string;
+  type?: string;
   transaction_id?: string;
   links?: {
     document_metadata?: string;
@@ -102,15 +102,23 @@ export async function searchCompanies(
     { cache: "no-store" }
   );
   if (!res.ok) throw new Error(`CH search error ${res.status}`);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse search response");
+  }
 }
 
 export async function getCompany(companyNumber: string): Promise<CHCompany> {
   const res = await chFetch(`/company/${companyNumber}`, {
-    next: { revalidate: 3600 },
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`CH company error ${res.status}`);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse company response");
+  }
 }
 
 export async function getOfficers(
@@ -118,10 +126,14 @@ export async function getOfficers(
 ): Promise<CHOfficersResponse> {
   const res = await chFetch(
     `/company/${companyNumber}/officers?items_per_page=50`,
-    { next: { revalidate: 3600 } }
+    { cache: "no-store" }
   );
   if (!res.ok) throw new Error(`CH officers error ${res.status}`);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse officers response");
+  }
 }
 
 export async function getFilingHistory(
@@ -129,10 +141,14 @@ export async function getFilingHistory(
 ): Promise<CHFilingHistoryResponse> {
   const res = await chFetch(
     `/company/${companyNumber}/filing-history?items_per_page=10`,
-    { next: { revalidate: 3600 } }
+    { cache: "no-store" }
   );
   if (!res.ok) throw new Error(`CH filings error ${res.status}`);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse filings response");
+  }
 }
 
 // ── Formatting helpers ───────────────────────────────────────────────────────
@@ -166,9 +182,10 @@ export function formatDate(iso?: string): string {
 }
 
 export function formatFilingDescription(
-  description: string,
+  description: string | undefined | null,
   values?: Record<string, string>
 ): string {
+  if (!description) return "Filing document";
   // Replace template placeholders like {change_date}
   let text = description.replace(/-/g, " ");
   if (values) {
@@ -179,7 +196,8 @@ export function formatFilingDescription(
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function companyTypeLabel(type: string): string {
+export function companyTypeLabel(type: string | undefined | null): string {
+  if (!type) return "Company";
   const map: Record<string, string> = {
     "ltd": "Private Limited Company",
     "llp": "Limited Liability Partnership",
