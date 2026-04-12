@@ -389,8 +389,8 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
           gap: "20px",
         }}
       >
-        {/* Going concern warning */}
-        {analysis.goingConcern && (
+        {/* Going concern warning — only when auditors flagged it AND opinion isn't clean */}
+        {analysis.goingConcern && analysis.auditOpinion !== "clean" && (
           <div
             style={{
               display: "flex",
@@ -454,6 +454,33 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
         {analysis.risks.length > 0 && (
           <div>
             <Label>Risks Identified ({analysis.risks.length})</Label>
+            {/* Risk count summary */}
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                marginBottom: "10px",
+                fontSize: "12px",
+                fontWeight: "600",
+              }}
+            >
+              {(["high", "medium", "low"] as const).map((sev) => {
+                const count = analysis.risks.filter(
+                  (r) => r.severity === sev
+                ).length;
+                const color =
+                  sev === "high"
+                    ? "#dc2626"
+                    : sev === "medium"
+                    ? "#d97706"
+                    : "#4f46e5";
+                return (
+                  <span key={sev} style={{ color }}>
+                    {count} {sev}
+                  </span>
+                );
+              })}
+            </div>
             <div
               style={{ display: "flex", flexDirection: "column", gap: "6px" }}
             >
@@ -550,16 +577,22 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
             borderTop: "1px solid #f1f5f9",
             paddingTop: "14px",
             display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            flexDirection: "column",
             gap: "12px",
-            flexWrap: "wrap",
           }}
         >
+          {/* Timestamp */}
           <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+            Analysis run{" "}
+            {new Date(analysis.analysedAt).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+            {analysis.cached ? " · Cached result" : " · Cached for 24 hours"}
             {analysis.documentDate && (
               <>
-                Accounts filed{" "}
+                {" · Accounts filed "}
                 {new Date(analysis.documentDate).toLocaleDateString("en-GB", {
                   day: "numeric",
                   month: "short",
@@ -567,7 +600,6 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
                 })}
               </>
             )}
-            {analysis.cached && " · cached"}
           </span>
 
           <Link
@@ -575,14 +607,16 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "5px",
-              padding: "7px 14px",
+              justifyContent: "center",
+              gap: "6px",
+              padding: "10px 18px",
               backgroundColor: "#4f46e5",
               color: "#ffffff",
-              borderRadius: "6px",
-              fontSize: "12px",
-              fontWeight: "600",
-              flexShrink: 0,
+              borderRadius: "8px",
+              fontSize: "13px",
+              fontWeight: "700",
+              letterSpacing: "0.01em",
+              textDecoration: "none",
             }}
           >
             View Full Financials →
