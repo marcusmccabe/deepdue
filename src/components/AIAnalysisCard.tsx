@@ -363,11 +363,130 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
   const runway = analysis.cashFlowAnalysis?.cashRunwayMonths ?? null;
   const runwayColor = runway === null ? "#475569" : runway < 12 ? "#dc2626" : runway < 24 ? "#d97706" : "#059669";
 
+  const VERDICT_CFG: Record<string, { bg: string; border: string; color: string; dot: string }> = {
+    low:      { bg: "#f0fdf4", border: "#bbf7d0", color: "#166534", dot: "#22c55e" },
+    medium:   { bg: "#fffbeb", border: "#fde68a", color: "#92400e", dot: "#f59e0b" },
+    high:     { bg: "#fef2f2", border: "#fecaca", color: "#991b1b", dot: "#ef4444" },
+    critical: { bg: "#fee2e2", border: "#f87171", color: "#7f1d1d", dot: "#dc2626" },
+  };
+  const verdictCfg = VERDICT_CFG[analysis.verdictRating ?? "medium"] ?? VERDICT_CFG.medium;
+  const hasKeyNumbers =
+    analysis.financials.revenue !== null ||
+    analysis.financials.profit !== null ||
+    analysis.financials.cash !== null;
+  const primaryRisk = analysis.risks.find((r: AnalysisRisk) => r.severity === "high");
+
   return (
     <div style={CARD}>
       <CardHeader badge={<Pill label={`✓ ${badgeLabel}`} color={badgeColor} bg={badgeBg} />} />
 
+      {/* ── Verdict banner ── */}
+      {analysis.verdict && (
+        <div
+          style={{
+            backgroundColor: verdictCfg.bg,
+            borderTop: `1px solid ${verdictCfg.border}`,
+            borderBottom: `1px solid ${verdictCfg.border}`,
+            padding: "11px 18px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <div
+            style={{
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              backgroundColor: verdictCfg.dot,
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ fontSize: "13px", fontWeight: "600", color: verdictCfg.color, lineHeight: "1.4" }}>
+            {analysis.verdict}
+          </span>
+        </div>
+      )}
+
       <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "20px" }}>
+
+        {/* ── Three key numbers ── */}
+        {hasKeyNumbers && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+            {(
+              [
+                { label: "Revenue",          value: analysis.financials.revenue, isNeg: false },
+                { label: "Net Profit / Loss", value: analysis.financials.profit,  isNeg: (analysis.financials.profit ?? 0) < 0 },
+                { label: "Cash",             value: analysis.financials.cash,    isNeg: false },
+              ] as { label: string; value: number | null; isNeg: boolean }[]
+            ).map(({ label, value, isNeg }) => (
+              <div
+                key={label}
+                style={{
+                  backgroundColor: "#f8fafc",
+                  borderRadius: "8px",
+                  padding: "12px 10px",
+                  textAlign: "center",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "17px",
+                    fontWeight: "800",
+                    color: value === null ? "#94a3b8" : isNeg ? "#dc2626" : "#0f172a",
+                    marginBottom: "4px",
+                    lineHeight: "1.2",
+                  }}
+                >
+                  {value !== null ? fmtCurrency(value, currency) : "—"}
+                </div>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: "600",
+                    color: "#94a3b8",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Primary risk callout ── */}
+        {primaryRisk && (
+          <div
+            style={{
+              borderLeft: "3px solid #dc2626",
+              backgroundColor: "rgba(220,38,38,0.05)",
+              borderRadius: "0 8px 8px 0",
+              padding: "12px 14px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                color: "#dc2626",
+                letterSpacing: "0.07em",
+                textTransform: "uppercase",
+                marginBottom: "6px",
+              }}
+            >
+              Primary Risk
+            </div>
+            <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
+              {primaryRisk.title}
+            </div>
+            <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.55" }}>
+              {primaryRisk.detail}
+            </div>
+          </div>
+        )}
 
         {/* ── Going concern ── */}
         {analysis.goingConcern && analysis.auditOpinion !== "clean" && (
@@ -713,6 +832,34 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {/* ── Conclusion / Assessment ── */}
+        {analysis.conclusion && (
+          <div
+            style={{
+              backgroundColor: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              padding: "14px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "10px",
+                fontWeight: "700",
+                color: "#94a3b8",
+                letterSpacing: "0.07em",
+                textTransform: "uppercase",
+                marginBottom: "8px",
+              }}
+            >
+              Assessment
+            </div>
+            <p style={{ fontSize: "13px", color: "#334155", lineHeight: "1.7", margin: 0 }}>
+              {analysis.conclusion}
+            </p>
           </div>
         )}
 

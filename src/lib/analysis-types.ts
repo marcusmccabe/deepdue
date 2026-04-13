@@ -90,6 +90,9 @@ export interface AccountsAnalysis {
   keyEvents: string[];
   emphasisOfMatter: string | null;
   sectorBenchmarkCommentary: string | null;
+  verdict?: string;
+  verdictRating?: "low" | "medium" | "high" | "critical";
+  conclusion?: string;
   // Metadata added by our route — not part of Claude's response
   analysedAt: string;
   companyNumber: string;
