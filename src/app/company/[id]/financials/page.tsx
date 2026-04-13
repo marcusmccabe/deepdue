@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { AccountsAnalysis } from "@/lib/analysis-types";
+import type { AccountsAnalysis, FinancialSnapshot } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -24,19 +24,9 @@ function fmt(value: number | null | undefined, currency = "GBP"): string {
   return `${symbol}${formatted}`;
 }
 
-function pct(numerator: number | null, denominator: number | null): string {
-  if (numerator === null || denominator === null || denominator === 0) return "—";
+function pct(numerator: number | null | undefined, denominator: number | null | undefined): string {
+  if (numerator == null || denominator == null || denominator === 0) return "—";
   return ((numerator / denominator) * 100).toFixed(1) + "%";
-}
-
-function changeArrow(current: number | null, prior: number | null): React.ReactNode {
-  if (current === null || prior === null || prior === 0) return null;
-  const improved = current > prior;
-  return (
-    <span style={{ color: improved ? "#059669" : "#dc2626", marginLeft: "4px" }}>
-      {improved ? "↑" : "↓"}
-    </span>
-  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -51,12 +41,7 @@ const CARD: React.CSSProperties = {
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div
-      style={{
-        padding: "15px 18px",
-        borderBottom: "1px solid #e2e8f0",
-      }}
-    >
+    <div style={{ padding: "15px 18px", borderBottom: "1px solid #e2e8f0" }}>
       <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>{title}</div>
       {subtitle && (
         <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{subtitle}</div>
@@ -65,27 +50,39 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
   );
 }
 
-function TableHeader({ hasPrior }: { hasPrior: boolean }) {
+function TableHeader() {
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: hasPrior ? "1fr 120px 120px" : "1fr 140px",
+        gridTemplateColumns: "1fr 140px",
         padding: "8px 18px",
         backgroundColor: "#f8fafc",
         borderBottom: "1px solid #e2e8f0",
       }}
     >
-      <span style={{ fontSize: "10px", fontWeight: "700", color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+      <span
+        style={{
+          fontSize: "10px",
+          fontWeight: "700",
+          color: "#94a3b8",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}
+      >
         Metric
       </span>
-      {hasPrior && (
-        <span style={{ fontSize: "10px", fontWeight: "700", color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase", textAlign: "right" }}>
-          Prior Year
-        </span>
-      )}
-      <span style={{ fontSize: "10px", fontWeight: "700", color: "#0f172a", letterSpacing: "0.06em", textTransform: "uppercase", textAlign: "right" }}>
-        Current Year
+      <span
+        style={{
+          fontSize: "10px",
+          fontWeight: "700",
+          color: "#0f172a",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          textAlign: "right",
+        }}
+      >
+        Value
       </span>
     </div>
   );
@@ -93,86 +90,59 @@ function TableHeader({ hasPrior }: { hasPrior: boolean }) {
 
 function MetricRow({
   label,
-  current,
-  prior,
-  hasPrior,
+  value,
   isLast,
   highlight,
-  profitSensitive,
 }: {
   label: string;
-  current: string;
-  prior?: string;
-  hasPrior: boolean;
+  value: string;
   isLast?: boolean;
   highlight?: "positive" | "negative" | "neutral";
-  profitSensitive?: boolean;
 }) {
-  // For profit-sensitive rows the arrow logic is inverted (higher = green already done by highlight)
-  const currentNum = parseFloat(current.replace(/[^0-9.-]/g, "")) || null;
-  const priorNum = prior ? parseFloat(prior.replace(/[^0-9.-]/g, "")) || null : null;
-
   const valueColor =
     highlight === "positive" ? "#059669" : highlight === "negative" ? "#dc2626" : "#0f172a";
-
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: hasPrior ? "1fr 120px 120px" : "1fr 140px",
+        gridTemplateColumns: "1fr 140px",
         alignItems: "center",
         padding: "13px 18px",
         borderBottom: isLast ? "none" : "1px solid #f1f5f9",
       }}
     >
       <span style={{ fontSize: "13px", color: "#475569" }}>{label}</span>
-      {hasPrior && (
-        <span style={{ fontSize: "13px", color: "#94a3b8", textAlign: "right" }}>
-          {prior ?? "—"}
-        </span>
-      )}
-      <span style={{ fontSize: "13px", fontWeight: "600", color: valueColor, textAlign: "right" }}>
-        {current}
-        {hasPrior && profitSensitive !== false && changeArrow(currentNum, priorNum)}
+      <span
+        style={{ fontSize: "13px", fontWeight: "600", color: valueColor, textAlign: "right" }}
+      >
+        {value}
       </span>
     </div>
   );
 }
 
-function BarChart({ revenue, priorRevenue, currency }: { revenue: number | null; priorRevenue: number | null; currency: string }) {
+function BarChart({ revenue, currency }: { revenue: number | null; currency: string }) {
   if (!revenue) {
     return (
-      <div style={{ padding: "32px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+      <div
+        style={{ padding: "32px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}
+      >
         Revenue data not available for chart
       </div>
     );
   }
 
-  const BAR_HEIGHT = 120;
-  const maxVal = Math.max(Math.abs(revenue), priorRevenue ? Math.abs(priorRevenue) : 0);
-
-  const currentBarH = maxVal > 0 ? Math.round((Math.abs(revenue) / maxVal) * BAR_HEIGHT) : BAR_HEIGHT;
-  const priorBarH = priorRevenue && maxVal > 0 ? Math.round((Math.abs(priorRevenue) / maxVal) * BAR_HEIGHT) : 0;
-
   return (
-    <div style={{ padding: "20px 18px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: "20px", height: `${BAR_HEIGHT + 20}px` }}>
-        {priorRevenue !== null && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "11px", fontWeight: "600", color: "#94a3b8" }}>
-              {fmt(priorRevenue, currency)}
-            </span>
-            <div
-              style={{
-                width: "64px",
-                height: `${priorBarH}px`,
-                backgroundColor: "#94a3b8",
-                borderRadius: "4px 4px 0 0",
-                opacity: 0.6,
-              }}
-            />
-          </div>
-        )}
+    <div
+      style={{
+        padding: "20px 18px 16px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "8px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "20px", height: "140px" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
           <span style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>
             {fmt(revenue, currency)}
@@ -180,7 +150,7 @@ function BarChart({ revenue, priorRevenue, currency }: { revenue: number | null;
           <div
             style={{
               width: "64px",
-              height: `${currentBarH}px`,
+              height: "120px",
               backgroundColor: "#4f46e5",
               borderRadius: "4px 4px 0 0",
               opacity: 0.85,
@@ -189,14 +159,16 @@ function BarChart({ revenue, priorRevenue, currency }: { revenue: number | null;
         </div>
       </div>
       <div style={{ display: "flex", gap: "16px", marginTop: "4px" }}>
-        {priorRevenue !== null && (
-          <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-            <div style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: "#94a3b8", opacity: 0.6 }} />
-            <span style={{ fontSize: "11px", color: "#94a3b8" }}>Prior year</span>
-          </div>
-        )}
         <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-          <div style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: "#4f46e5", opacity: 0.85 }} />
+          <div
+            style={{
+              width: "10px",
+              height: "10px",
+              borderRadius: "2px",
+              backgroundColor: "#4f46e5",
+              opacity: 0.85,
+            }}
+          />
           <span style={{ fontSize: "11px", color: "#475569" }}>Current year</span>
         </div>
       </div>
@@ -209,7 +181,15 @@ function BarChart({ revenue, priorRevenue, currency }: { revenue: number | null;
 
 function LoadingState() {
   return (
-    <div style={{ padding: "60px 18px", display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+    <div
+      style={{
+        padding: "60px 18px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "16px",
+      }}
+    >
       <div
         style={{
           width: "30px",
@@ -221,7 +201,9 @@ function LoadingState() {
         }}
       />
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "14px", fontWeight: "600", color: "#0f172a", marginBottom: "6px" }}>
+        <div
+          style={{ fontSize: "14px", fontWeight: "600", color: "#0f172a", marginBottom: "6px" }}
+        >
           Loading financial data
         </div>
         <div style={{ fontSize: "12px", color: "#94a3b8" }}>
@@ -271,14 +253,13 @@ export default function FinancialsPage() {
     }
 
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [companyNumber]);
 
-  const currency = analysis?.financials?.currency ?? "GBP";
-  const prior = analysis?.priorYearFinancials ?? null;
-  const hasPrior = prior !== null;
-
-  const periodEnd = analysis?.financials?.periodEnd;
+  const snap: FinancialSnapshot | undefined = analysis?.financialSnapshot;
+  const currency = "GBP";
 
   return (
     <div
@@ -325,9 +306,16 @@ export default function FinancialsPage() {
           Company Profile
         </Link>
         <span style={{ color: "#e2e8f0" }}>›</span>
-        <span style={{ fontSize: "13px", color: "#0f172a", fontWeight: "600" }}>Financial Analysis</span>
+        <span style={{ fontSize: "13px", color: "#0f172a", fontWeight: "600" }}>
+          Financial Analysis
+        </span>
         <div style={{ flex: 1 }} />
-        <div style={{ fontFamily: 'var(--font-instrument-serif), "Instrument Serif", serif', fontSize: "18px" }}>
+        <div
+          style={{
+            fontFamily: 'var(--font-instrument-serif), "Instrument Serif", serif',
+            fontSize: "18px",
+          }}
+        >
           <span style={{ color: "#0f172a" }}>Deep</span>
           <span style={{ color: "#4f46e5" }}>Due</span>
           <span style={{ color: "#94a3b8", fontSize: "13px" }}>.ai</span>
@@ -350,9 +338,7 @@ export default function FinancialsPage() {
             Financial Analysis
           </h1>
           <p style={{ fontSize: "13px", color: "#64748b", margin: 0 }}>
-            {periodEnd
-              ? <>Financial year ended <strong>{new Date(periodEnd).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</strong> · </>
-              : "Figures extracted by AI from the most recent filed accounts · "}
+            Figures extracted by AI from the most recent filed accounts ·{" "}
             <span style={{ fontFamily: "'Courier New', monospace", fontWeight: "600" }}>
               {companyNumber}
             </span>
@@ -378,7 +364,14 @@ export default function FinancialsPage() {
                   padding: "12px 16px",
                 }}
               >
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "4px" }}>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    color: "#0f172a",
+                    marginBottom: "4px",
+                  }}
+                >
                   Failed to load financial data
                 </div>
                 <div style={{ fontSize: "12px", color: "#475569" }}>
@@ -395,107 +388,64 @@ export default function FinancialsPage() {
 
             {/* Key figures */}
             <div style={CARD}>
-              <SectionHeader
-                title="Key Financial Figures"
-                subtitle={hasPrior ? "Current year vs prior year" : undefined}
-              />
-              <TableHeader hasPrior={hasPrior} />
-
+              <SectionHeader title="Key Financial Figures" />
+              <TableHeader />
               <MetricRow
                 label="Revenue (Turnover)"
-                current={fmt(analysis.financials.revenue, currency)}
-                prior={hasPrior ? fmt(prior!.revenue, currency) : undefined}
-                hasPrior={hasPrior}
-                highlight={analysis.financials.revenue !== null && analysis.financials.revenue > 0 ? "positive" : "neutral"}
+                value={fmt(snap?.revenue, currency)}
+                highlight={
+                  snap?.revenue != null && snap.revenue > 0 ? "positive" : "neutral"
+                }
               />
               <MetricRow
                 label="Gross Profit"
-                current={fmt(analysis.financials.grossProfit, currency)}
-                prior={undefined}
-                hasPrior={hasPrior}
+                value={fmt(snap?.grossProfit, currency)}
                 highlight={
-                  analysis.financials.grossProfit === null ? "neutral"
-                  : analysis.financials.grossProfit >= 0 ? "positive" : "negative"
+                  snap?.grossProfit == null ? "neutral"
+                  : snap.grossProfit >= 0 ? "positive" : "negative"
                 }
               />
               <MetricRow
                 label="Operating Profit"
-                current={fmt(analysis.financials.operatingProfit, currency)}
-                prior={undefined}
-                hasPrior={hasPrior}
+                value={fmt(snap?.operatingProfit, currency)}
                 highlight={
-                  analysis.financials.operatingProfit === null ? "neutral"
-                  : analysis.financials.operatingProfit >= 0 ? "positive" : "negative"
+                  snap?.operatingProfit == null ? "neutral"
+                  : snap.operatingProfit >= 0 ? "positive" : "negative"
                 }
               />
               <MetricRow
                 label="Net Profit / (Loss)"
-                current={fmt(analysis.financials.profit, currency)}
-                prior={hasPrior ? fmt(prior!.profit, currency) : undefined}
-                hasPrior={hasPrior}
+                value={fmt(snap?.netProfit, currency)}
                 highlight={
-                  analysis.financials.profit === null ? "neutral"
-                  : analysis.financials.profit >= 0 ? "positive" : "negative"
-                }
-              />
-              <MetricRow
-                label="Total Assets"
-                current={fmt(analysis.financials.assets, currency)}
-                prior={hasPrior ? fmt(prior!.assets, currency) : undefined}
-                hasPrior={hasPrior}
-              />
-              <MetricRow
-                label="Total Liabilities"
-                current={fmt(analysis.financials.liabilities, currency)}
-                prior={hasPrior ? fmt(prior!.liabilities, currency) : undefined}
-                hasPrior={hasPrior}
-                highlight={
-                  analysis.financials.liabilities && analysis.financials.assets &&
-                  analysis.financials.liabilities > analysis.financials.assets
-                    ? "negative" : "neutral"
+                  snap?.netProfit == null ? "neutral"
+                  : snap.netProfit >= 0 ? "positive" : "negative"
                 }
               />
               <MetricRow
                 label="Net Assets (Equity)"
-                current={fmt(analysis.financials.netAssets ?? (
-                  analysis.financials.assets !== null && analysis.financials.liabilities !== null
-                    ? analysis.financials.assets - analysis.financials.liabilities
-                    : null
-                ), currency)}
-                prior={
-                  hasPrior && prior!.assets !== null && prior!.liabilities !== null
-                    ? fmt(prior!.assets - prior!.liabilities, currency)
-                    : undefined
-                }
-                hasPrior={hasPrior}
+                value={fmt(snap?.netAssets, currency)}
                 highlight={
-                  (analysis.financials.netAssets ?? (
-                    analysis.financials.assets !== null && analysis.financials.liabilities !== null
-                      ? analysis.financials.assets - analysis.financials.liabilities
-                      : null
-                  )) !== null
-                    ? ((analysis.financials.netAssets ?? (analysis.financials.assets! - analysis.financials.liabilities!)) >= 0 ? "positive" : "negative")
-                    : "neutral"
+                  snap?.netAssets == null ? "neutral"
+                  : snap.netAssets >= 0 ? "positive" : "negative"
                 }
               />
               <MetricRow
                 label="Cash &amp; Equivalents"
-                current={fmt(analysis.financials.cash, currency)}
-                prior={hasPrior ? fmt(prior!.cash, currency) : undefined}
-                hasPrior={hasPrior}
-                highlight={analysis.financials.cash !== null && analysis.financials.cash > 0 ? "positive" : "neutral"}
+                value={fmt(snap?.cash, currency)}
+                highlight={snap?.cash != null && snap.cash > 0 ? "positive" : "neutral"}
               />
               <MetricRow
                 label="Total Debt"
-                current={fmt(analysis.financials.debt, currency)}
-                prior={undefined}
-                hasPrior={hasPrior}
-                highlight={analysis.financials.debt !== null && analysis.financials.debt > 0 ? "negative" : "neutral"}
+                value={fmt(snap?.totalDebt, currency)}
+                highlight={snap?.totalDebt != null && snap.totalDebt > 0 ? "negative" : "neutral"}
               />
               <MetricRow
                 label="Employees"
-                current={analysis.financials.employees !== null ? analysis.financials.employees.toLocaleString("en-GB") : "—"}
-                hasPrior={hasPrior}
+                value={
+                  snap?.employeeCount != null
+                    ? snap.employeeCount.toLocaleString("en-GB")
+                    : "—"
+                }
                 isLast
               />
             </div>
@@ -505,63 +455,29 @@ export default function FinancialsPage() {
               <SectionHeader title="Calculated Ratios" />
               <MetricRow
                 label="Gross Margin"
-                current={pct(analysis.financials.grossProfit, analysis.financials.revenue)}
-                hasPrior={false}
+                value={pct(snap?.grossProfit, snap?.revenue)}
                 highlight={
-                  analysis.financials.grossProfit !== null && analysis.financials.revenue
-                    ? analysis.financials.grossProfit / analysis.financials.revenue >= 0 ? "positive" : "negative"
+                  snap?.grossProfit != null && snap?.revenue
+                    ? snap.grossProfit / snap.revenue >= 0 ? "positive" : "negative"
                     : "neutral"
                 }
               />
               <MetricRow
                 label="Operating Margin"
-                current={pct(analysis.financials.operatingProfit, analysis.financials.revenue)}
-                hasPrior={false}
+                value={pct(snap?.operatingProfit, snap?.revenue)}
                 highlight={
-                  analysis.financials.operatingProfit !== null && analysis.financials.revenue
-                    ? analysis.financials.operatingProfit / analysis.financials.revenue >= 0 ? "positive" : "negative"
+                  snap?.operatingProfit != null && snap?.revenue
+                    ? snap.operatingProfit / snap.revenue >= 0 ? "positive" : "negative"
                     : "neutral"
                 }
               />
               <MetricRow
                 label="Net Margin"
-                current={pct(analysis.financials.profit, analysis.financials.revenue)}
-                hasPrior={false}
-                highlight={
-                  analysis.financials.profit !== null && analysis.financials.revenue
-                    ? analysis.financials.profit / analysis.financials.revenue >= 0 ? "positive" : "negative"
-                    : "neutral"
-                }
-              />
-              <MetricRow
-                label="Gearing (Liabilities / Equity)"
-                current={(() => {
-                  const { liabilities, assets } = analysis.financials;
-                  if (!liabilities || !assets || assets === 0) return "—";
-                  const equity = assets - liabilities;
-                  if (equity <= 0) return "N/A";
-                  return ((liabilities / equity) * 100).toFixed(1) + "%";
-                })()}
-                hasPrior={false}
-                highlight={
-                  analysis.financials.liabilities && analysis.financials.assets
-                    ? analysis.financials.liabilities / (analysis.financials.assets - analysis.financials.liabilities) > 2
-                      ? "negative" : "neutral"
-                    : "neutral"
-                }
-              />
-              <MetricRow
-                label="Net Assets (Equity)"
-                current={
-                  analysis.financials.assets !== null && analysis.financials.liabilities !== null
-                    ? fmt(analysis.financials.assets - analysis.financials.liabilities, currency)
-                    : "—"
-                }
-                hasPrior={false}
+                value={pct(snap?.netProfit, snap?.revenue)}
                 isLast
                 highlight={
-                  analysis.financials.assets !== null && analysis.financials.liabilities !== null
-                    ? analysis.financials.assets - analysis.financials.liabilities >= 0 ? "positive" : "negative"
+                  snap?.netProfit != null && snap?.revenue
+                    ? snap.netProfit / snap.revenue >= 0 ? "positive" : "negative"
                     : "neutral"
                 }
               />
@@ -570,11 +486,7 @@ export default function FinancialsPage() {
             {/* Revenue chart */}
             <div style={CARD}>
               <SectionHeader title="Revenue" />
-              <BarChart
-                revenue={analysis.financials.revenue}
-                priorRevenue={prior?.revenue ?? null}
-                currency={currency}
-              />
+              <BarChart revenue={snap?.revenue ?? null} currency={currency} />
             </div>
 
             {/* Document metadata footer */}
@@ -592,7 +504,11 @@ export default function FinancialsPage() {
             >
               <span>
                 {analysis.documentDate &&
-                  `Accounts filed ${new Date(analysis.documentDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+                  `Accounts filed ${new Date(analysis.documentDate).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}`}
                 {analysis.cached && " · cached result"}
               </span>
               <span>Analysed {new Date(analysis.analysedAt).toLocaleString("en-GB")}</span>
