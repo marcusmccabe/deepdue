@@ -11,7 +11,7 @@ const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const SYSTEM_PROMPT =
-  "You are a senior financial analyst and forensic accountant specialising in UK company accounts. Analyse the provided accounts document thoroughly including all notes, the directors report, auditor report, cash flow statement, and balance sheet.\n\nIMPORTANT — Proportionality: When assessing risk severity, consider the size of the issue relative to the company's overall financial position. A £17k write-off at a company with £18m net assets is LOW risk at most. A £500k write-off at a company with £600k net assets is HIGH risk. Always contextualise figures against total assets, revenue and net assets before assigning severity.\n\nIMPORTANT — Risk quantity: Only flag genuine risks. Do not pad the list. If there are only 2 real risks, return 2. Maximum 5 risks total. Quality over quantity.\n\nExtract the following in JSON format only, no other text, no markdown, no code blocks:\n{\nverdict: string (one sentence, max 20 words, summarising the overall risk position, e.g. 'Financially stable with strong cash reserves and consistent profitability.' or 'High risk — mounting losses, going concern flag raised, and declining revenue.' or 'Moderate risk — profitable but cash position is deteriorating and debt is rising.'),\nverdictRating: 'low' | 'medium' | 'high' | 'critical',\nconclusion: string (2-3 sentences of plain English a non-accountant credit controller can act on, e.g. 'We would recommend proceeding with caution. The company is loss-making but has sufficient cash to sustain operations for approximately 18 months. Request trade references and consider a reduced credit limit until the next set of accounts is filed.'),\nrisks: [ { severity: 'high' | 'medium' | 'low', title: string, detail: string } ],\nfinancials: {\nrevenue: number | null,\nprofit: number | null,\ngrossProfit: number | null,\noperatingProfit: number | null,\nassets: number | null,\nliabilities: number | null,\nnetAssets: number | null,\ncash: number | null,\ndebt: number | null,\nemployees: number | null,\ncurrency: string,\nperiodEnd: string | null\n},\npriorYearFinancials: {\nrevenue: number | null,\nprofit: number | null,\nassets: number | null,\nliabilities: number | null,\ncash: number | null\n} | null,\nsummary: string,\nauditOpinion: 'clean' | 'qualified' | 'adverse' | 'disclaimer' | 'unknown',\nauditorName: string | null,\nauditorChanged: boolean | null,\ngoingConcern: boolean,\ngoingConcernDetail: string | null,\ngoingConcernRunwayMonths: number | null,\ndirectorLoans: {\npresent: boolean,\ndetail: string | null,\ntotalValue: number | null\n},\nrelatedPartyTransactions: {\npresent: boolean,\ndetail: string | null\n},\nlegalProceedings: {\npresent: boolean,\ndetail: string | null\n},\ncyberOrOperationalRisk: {\npresent: boolean,\ndetail: string | null\n},\ncashFlowAnalysis: {\noperatingCashFlow: number | null,\nfreeCashFlow: number | null,\ncashBurnMonthly: number | null,\ncashRunwayMonths: number | null,\ndetail: string\n},\nrevenueConcentration: {\nconcentrated: boolean | null,\ndetail: string | null\n},\nmanagementSentiment: 'positive' | 'cautious' | 'negative' | 'mixed' | 'unknown',\nmanagementSentimentDetail: string | null,\nyearOnYearNarrative: string | null,\nkeyEvents: string[],\nemphasisOfMatter: string | null,\nsectorBenchmarkCommentary: string | null\n}";
+  "You are a forensic accountant producing a neutral factual briefing from UK company accounts. Your role is to extract and summarise what the accounts say — you do not give credit opinions, risk ratings, or recommendations. Never use evaluative language such as 'creditworthy', 'high risk', 'concerning', 'worrying', 'recommended', or any equivalent. State facts only.\n\nExtract the following in JSON format only, no other text, no markdown, no code blocks:\n{\nfinancialSnapshot: {\nrevenue: number | null,\ngrossProfit: number | null,\noperatingProfit: number | null,\nnetProfit: number | null,\ncash: number | null,\nnetAssets: number | null,\ntotalDebt: number | null,\nemployeeCount: number | null\n},\nkeyMovements: string[] (max 8 items — plain factual statements about year-on-year changes with numbers, e.g. 'Revenue increased 9% from £373m to £408m.' or 'Operating cash flow fell 61% from £3.1m to £1.3m.' or 'Net assets increased 36% to £3.0m.' or 'Debtor balances increased by £3.4m.' No opinion words.),\nitemsForAttention: [ { heading: string, detail: string } ] (max 5 items — factual observations a professional would want to note: going concern notes, qualified audit opinions, director loans, large related party balances, significant debtor increases, overdue filings, charges registered, legal proceedings mentioned in notes. Only include genuine disclosures or anomalies. Do not include items simply because a metric moved. If there are no genuine items return an empty array.),\nkeyEvents: string[] (max 6 items — plain factual statements about specific events during the year: director appointments and resignations, dividends paid, acquisitions, disposals, significant contracts mentioned, restructuring. Each is one sentence.),\nmanagementCommentary: string (2-3 sentences neutrally summarising what the directors said about the year and outlook. Do not endorse or contradict their statements. Just report what they said. Prefix with 'Directors reported...' or 'According to the strategic report...'),\nauditOpinion: {\nopinion: 'clean' | 'qualified' | 'adverse' | 'disclaimer' | 'unknown',\nauditorName: string | null,\nauditorChanged: boolean | null,\nemphasisOfMatter: string | null\n},\ngoingConcern: {\nflagged: boolean,\ndetail: string | null\n},\ndirectorLoans: {\npresent: boolean,\ndetail: string | null\n},\nrelatedPartyTransactions: {\npresent: boolean,\ndetail: string | null\n}\n}";
 
 function chAuth(): string {
   const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
@@ -242,74 +242,53 @@ export async function GET(request: NextRequest) {
     const parsed = JSON.parse(jsonText);
 
     analysis = {
-      risks: parsed.risks ?? [],
-      financials: {
-        revenue: parsed.financials?.revenue ?? null,
-        profit: parsed.financials?.profit ?? null,
-        grossProfit: parsed.financials?.grossProfit ?? null,
-        operatingProfit: parsed.financials?.operatingProfit ?? null,
-        assets: parsed.financials?.assets ?? null,
-        liabilities: parsed.financials?.liabilities ?? null,
-        netAssets: parsed.financials?.netAssets ?? null,
-        cash: parsed.financials?.cash ?? null,
-        debt: parsed.financials?.debt ?? null,
-        employees: parsed.financials?.employees ?? null,
-        currency: parsed.financials?.currency ?? "GBP",
-        periodEnd: parsed.financials?.periodEnd ?? null,
-      },
-      priorYearFinancials: parsed.priorYearFinancials
+      financialSnapshot: parsed.financialSnapshot
         ? {
-            revenue: parsed.priorYearFinancials.revenue ?? null,
-            profit: parsed.priorYearFinancials.profit ?? null,
-            assets: parsed.priorYearFinancials.assets ?? null,
-            liabilities: parsed.priorYearFinancials.liabilities ?? null,
-            cash: parsed.priorYearFinancials.cash ?? null,
+            revenue: parsed.financialSnapshot.revenue ?? null,
+            grossProfit: parsed.financialSnapshot.grossProfit ?? null,
+            operatingProfit: parsed.financialSnapshot.operatingProfit ?? null,
+            netProfit: parsed.financialSnapshot.netProfit ?? null,
+            cash: parsed.financialSnapshot.cash ?? null,
+            netAssets: parsed.financialSnapshot.netAssets ?? null,
+            totalDebt: parsed.financialSnapshot.totalDebt ?? null,
+            employeeCount: parsed.financialSnapshot.employeeCount ?? null,
           }
-        : null,
-      summary: parsed.summary ?? "",
-      auditOpinion: parsed.auditOpinion ?? "unknown",
-      auditorName: parsed.auditorName ?? null,
-      auditorChanged: parsed.auditorChanged ?? null,
-      goingConcern: parsed.goingConcern ?? false,
-      goingConcernDetail: parsed.goingConcernDetail ?? null,
-      goingConcernRunwayMonths: parsed.goingConcernRunwayMonths ?? null,
-      directorLoans: {
-        present: parsed.directorLoans?.present ?? false,
-        detail: parsed.directorLoans?.detail ?? null,
-        totalValue: parsed.directorLoans?.totalValue ?? null,
-      },
-      relatedPartyTransactions: {
-        present: parsed.relatedPartyTransactions?.present ?? false,
-        detail: parsed.relatedPartyTransactions?.detail ?? null,
-      },
-      legalProceedings: {
-        present: parsed.legalProceedings?.present ?? false,
-        detail: parsed.legalProceedings?.detail ?? null,
-      },
-      cyberOrOperationalRisk: {
-        present: parsed.cyberOrOperationalRisk?.present ?? false,
-        detail: parsed.cyberOrOperationalRisk?.detail ?? null,
-      },
-      cashFlowAnalysis: {
-        operatingCashFlow: parsed.cashFlowAnalysis?.operatingCashFlow ?? null,
-        freeCashFlow: parsed.cashFlowAnalysis?.freeCashFlow ?? null,
-        cashBurnMonthly: parsed.cashFlowAnalysis?.cashBurnMonthly ?? null,
-        cashRunwayMonths: parsed.cashFlowAnalysis?.cashRunwayMonths ?? null,
-        detail: parsed.cashFlowAnalysis?.detail ?? "",
-      },
-      revenueConcentration: {
-        concentrated: parsed.revenueConcentration?.concentrated ?? null,
-        detail: parsed.revenueConcentration?.detail ?? null,
-      },
-      managementSentiment: parsed.managementSentiment ?? "unknown",
-      managementSentimentDetail: parsed.managementSentimentDetail ?? null,
-      yearOnYearNarrative: parsed.yearOnYearNarrative ?? null,
+        : undefined,
+      keyMovements: parsed.keyMovements ?? [],
+      itemsForAttention: (parsed.itemsForAttention ?? []).map(
+        (item: { heading?: string; detail?: string }) => ({
+          heading: item.heading ?? "",
+          detail: item.detail ?? "",
+        })
+      ),
       keyEvents: parsed.keyEvents ?? [],
-      emphasisOfMatter: parsed.emphasisOfMatter ?? null,
-      sectorBenchmarkCommentary: parsed.sectorBenchmarkCommentary ?? null,
-      verdict: parsed.verdict ?? "",
-      verdictRating: parsed.verdictRating ?? "medium",
-      conclusion: parsed.conclusion ?? "",
+      managementCommentary: parsed.managementCommentary ?? undefined,
+      auditOpinion: parsed.auditOpinion
+        ? {
+            opinion: parsed.auditOpinion.opinion ?? "unknown",
+            auditorName: parsed.auditOpinion.auditorName ?? null,
+            auditorChanged: parsed.auditOpinion.auditorChanged ?? null,
+            emphasisOfMatter: parsed.auditOpinion.emphasisOfMatter ?? null,
+          }
+        : undefined,
+      goingConcern: parsed.goingConcern
+        ? {
+            flagged: parsed.goingConcern.flagged ?? false,
+            detail: parsed.goingConcern.detail ?? null,
+          }
+        : undefined,
+      directorLoans: parsed.directorLoans
+        ? {
+            present: parsed.directorLoans.present ?? false,
+            detail: parsed.directorLoans.detail ?? null,
+          }
+        : undefined,
+      relatedPartyTransactions: parsed.relatedPartyTransactions
+        ? {
+            present: parsed.relatedPartyTransactions.present ?? false,
+            detail: parsed.relatedPartyTransactions.detail ?? null,
+          }
+        : undefined,
       analysedAt: new Date().toISOString(),
       companyNumber,
       documentDate: filing.date,

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { AccountsAnalysis, AnalysisRisk } from "@/lib/analysis-types";
+import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
@@ -25,34 +25,7 @@ function fmtCurrency(value: number | null | undefined, currency = "GBP"): string
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function SeverityBadge({ severity }: { severity: AnalysisRisk["severity"] }) {
-  const cfg = {
-    high: { label: "High", color: "#dc2626", bg: "rgba(220,38,38,0.09)" },
-    medium: { label: "Medium", color: "#d97706", bg: "rgba(217,119,6,0.09)" },
-    low: { label: "Low", color: "#4f46e5", bg: "rgba(79,70,229,0.09)" },
-  } as const;
-  const { label, color, bg } = cfg[severity] ?? cfg.low;
-  return (
-    <span
-      style={{
-        fontSize: "10px",
-        fontWeight: "700",
-        color,
-        backgroundColor: bg,
-        padding: "2px 8px",
-        borderRadius: "100px",
-        textTransform: "uppercase",
-        letterSpacing: "0.05em",
-        flexShrink: 0,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function AuditBadge({ opinion }: { opinion: AccountsAnalysis["auditOpinion"] }) {
+function AuditBadge({ opinion }: { opinion: string }) {
   const cfg: Record<string, { label: string; color: string; bg: string; icon: string }> = {
     clean: { label: "Clean Opinion", color: "#059669", bg: "rgba(5,150,105,0.09)", icon: "✓" },
     qualified: { label: "Qualified Opinion", color: "#d97706", bg: "rgba(217,119,6,0.09)", icon: "⚠" },
@@ -77,32 +50,6 @@ function AuditBadge({ opinion }: { opinion: AccountsAnalysis["auditOpinion"] }) 
       }}
     >
       {c.icon} {c.label}
-    </span>
-  );
-}
-
-function SentimentBadge({ sentiment }: { sentiment: AccountsAnalysis["managementSentiment"] }) {
-  const cfg: Record<string, { label: string; color: string; bg: string }> = {
-    positive: { label: "Positive Outlook", color: "#059669", bg: "rgba(5,150,105,0.09)" },
-    cautious: { label: "Cautious Outlook", color: "#d97706", bg: "rgba(217,119,6,0.09)" },
-    mixed: { label: "Mixed Outlook", color: "#d97706", bg: "rgba(217,119,6,0.09)" },
-    negative: { label: "Negative Outlook", color: "#dc2626", bg: "rgba(220,38,38,0.09)" },
-    unknown: { label: "Sentiment Unknown", color: "#94a3b8", bg: "rgba(148,163,184,0.09)" },
-  };
-  const c = cfg[sentiment] ?? cfg.unknown;
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        fontSize: "11px",
-        fontWeight: "600",
-        color: c.color,
-        backgroundColor: c.bg,
-        padding: "3px 10px",
-        borderRadius: "100px",
-      }}
-    >
-      {c.label}
     </span>
   );
 }
@@ -183,45 +130,6 @@ function Label({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </div>
-  );
-}
-
-function AlertBox({
-  color,
-  bg,
-  border,
-  title,
-  children,
-}: {
-  color: string;
-  bg: string;
-  border: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        borderLeft: `3px solid ${border}`,
-        backgroundColor: bg,
-        borderRadius: "0 8px 8px 0",
-        padding: "12px 14px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: "13px",
-          fontWeight: "700",
-          color,
-          marginBottom: "4px",
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.55" }}>
-        {children}
-      </div>
     </div>
   );
 }
@@ -343,122 +251,6 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
       <div style={CARD}>
         <CardHeader badge={<Pill label="Error" color="#dc2626" bg="rgba(220,38,38,0.08)" />} />
         <div style={{ padding: "18px" }}>
-          <AlertBox color="#0f172a" bg="rgba(220,38,38,0.05)" border="#dc2626" title="Analysis failed">
-            {errorMsg || "An unexpected error occurred. Please try refreshing."}
-          </AlertBox>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Success ───────────────────────────────────────────────────────────────
-  if (!analysis) return null;
-
-  const currency = analysis.financials.currency ?? "GBP";
-  const highRisks = analysis.risks.filter((r) => r.severity === "high").length;
-  const badgeLabel = highRisks > 0 ? `${highRisks} high risk${highRisks > 1 ? "s" : ""}` : "Analysis complete";
-  const badgeColor = highRisks > 0 ? "#dc2626" : "#059669";
-  const badgeBg = highRisks > 0 ? "rgba(220,38,38,0.08)" : "rgba(5,150,105,0.08)";
-
-  const runway = analysis.cashFlowAnalysis?.cashRunwayMonths ?? null;
-  const runwayColor = runway === null ? "#475569" : runway < 12 ? "#dc2626" : runway < 24 ? "#d97706" : "#059669";
-
-  const VERDICT_CFG: Record<string, { bg: string; border: string; color: string; dot: string }> = {
-    low:      { bg: "#f0fdf4", border: "#bbf7d0", color: "#166534", dot: "#22c55e" },
-    medium:   { bg: "#fffbeb", border: "#fde68a", color: "#92400e", dot: "#f59e0b" },
-    high:     { bg: "#fef2f2", border: "#fecaca", color: "#991b1b", dot: "#ef4444" },
-    critical: { bg: "#fee2e2", border: "#f87171", color: "#7f1d1d", dot: "#dc2626" },
-  };
-  const verdictCfg = VERDICT_CFG[analysis.verdictRating ?? "medium"] ?? VERDICT_CFG.medium;
-  const hasKeyNumbers =
-    analysis.financials.revenue !== null ||
-    analysis.financials.profit !== null ||
-    analysis.financials.cash !== null;
-  const primaryRisk = analysis.risks.find((r: AnalysisRisk) => r.severity === "high");
-
-  return (
-    <div style={CARD}>
-      <CardHeader badge={<Pill label={`✓ ${badgeLabel}`} color={badgeColor} bg={badgeBg} />} />
-
-      {/* ── Verdict banner ── */}
-      {analysis.verdict && (
-        <div
-          style={{
-            backgroundColor: verdictCfg.bg,
-            borderTop: `1px solid ${verdictCfg.border}`,
-            borderBottom: `1px solid ${verdictCfg.border}`,
-            padding: "11px 18px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          <div
-            style={{
-              width: "8px",
-              height: "8px",
-              borderRadius: "50%",
-              backgroundColor: verdictCfg.dot,
-              flexShrink: 0,
-            }}
-          />
-          <span style={{ fontSize: "13px", fontWeight: "600", color: verdictCfg.color, lineHeight: "1.4" }}>
-            {analysis.verdict}
-          </span>
-        </div>
-      )}
-
-      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "20px" }}>
-
-        {/* ── Three key numbers ── */}
-        {hasKeyNumbers && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-            {(
-              [
-                { label: "Revenue",          value: analysis.financials.revenue, isNeg: false },
-                { label: "Net Profit / Loss", value: analysis.financials.profit,  isNeg: (analysis.financials.profit ?? 0) < 0 },
-                { label: "Cash",             value: analysis.financials.cash,    isNeg: false },
-              ] as { label: string; value: number | null; isNeg: boolean }[]
-            ).map(({ label, value, isNeg }) => (
-              <div
-                key={label}
-                style={{
-                  backgroundColor: "#f8fafc",
-                  borderRadius: "8px",
-                  padding: "12px 10px",
-                  textAlign: "center",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "17px",
-                    fontWeight: "800",
-                    color: value === null ? "#94a3b8" : isNeg ? "#dc2626" : "#0f172a",
-                    marginBottom: "4px",
-                    lineHeight: "1.2",
-                  }}
-                >
-                  {value !== null ? fmtCurrency(value, currency) : "—"}
-                </div>
-                <div
-                  style={{
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    color: "#94a3b8",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  {label}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── Primary risk callout ── */}
-        {primaryRisk && (
           <div
             style={{
               borderLeft: "3px solid #dc2626",
@@ -467,354 +259,161 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
               padding: "12px 14px",
             }}
           >
-            <div
-              style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                color: "#dc2626",
-                letterSpacing: "0.07em",
-                textTransform: "uppercase",
-                marginBottom: "6px",
-              }}
-            >
-              Primary Risk
-            </div>
             <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>
-              {primaryRisk.title}
+              Analysis failed
             </div>
             <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.55" }}>
-              {primaryRisk.detail}
+              {errorMsg || "An unexpected error occurred. Please try refreshing."}
             </div>
-          </div>
-        )}
-
-        {/* ── Going concern ── */}
-        {analysis.goingConcern && analysis.auditOpinion !== "clean" && (
-          <div
-            style={{
-              backgroundColor: "rgba(217,119,6,0.07)",
-              border: "1px solid rgba(217,119,6,0.30)",
-              borderRadius: "8px",
-              padding: "12px 14px",
-            }}
-          >
-            <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-              <span style={{ fontSize: "16px", flexShrink: 0 }}>⚠️</span>
-              <div>
-                <div style={{ fontSize: "13px", fontWeight: "700", color: "#92400e", marginBottom: "4px" }}>
-                  Going Concern Note Identified
-                </div>
-                <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
-                  {analysis.goingConcernDetail ||
-                    "Auditors have flagged material uncertainty about this company's ability to continue as a going concern."}
-                </div>
-                {analysis.goingConcernRunwayMonths !== null && (
-                  <div style={{ fontSize: "12px", color: "#92400e", marginTop: "6px", fontWeight: "600" }}>
-                    Estimated runway: {analysis.goingConcernRunwayMonths} months based on current cash position
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Audit opinion ── */}
-        <div>
-          <Label>Audit Opinion</Label>
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-              <AuditBadge opinion={analysis.auditOpinion} />
-              {analysis.auditorChanged === true && (
-                <span
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "700",
-                    color: "#dc2626",
-                    backgroundColor: "rgba(220,38,38,0.08)",
-                    padding: "3px 8px",
-                    borderRadius: "100px",
-                    border: "1px solid rgba(220,38,38,0.25)",
-                  }}
-                >
-                  ⚠ Auditor changed this year
-                </span>
-              )}
-            </div>
-            {analysis.auditorName && (
-              <div style={{ fontSize: "12px", color: "#64748b" }}>
-                Audited by <span style={{ fontWeight: "600", color: "#0f172a" }}>{analysis.auditorName}</span>
-              </div>
-            )}
-            {analysis.emphasisOfMatter && (
-              <div
-                style={{
-                  backgroundColor: "rgba(217,119,6,0.07)",
-                  border: "1px solid rgba(217,119,6,0.25)",
-                  borderRadius: "6px",
-                  padding: "10px 12px",
-                  marginTop: "2px",
-                }}
-              >
-                <div style={{ fontSize: "10px", fontWeight: "700", color: "#d97706", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "4px" }}>
-                  Emphasis of Matter
-                </div>
-                <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
-                  {analysis.emphasisOfMatter}
-                </div>
-              </div>
-            )}
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {/* ── Summary + sentiment ── */}
-        {analysis.summary && (
-          <div>
-            <Label>Summary</Label>
-            <p style={{ fontSize: "13px", color: "#475569", lineHeight: "1.65", margin: "0 0 10px" }}>
-              {analysis.summary}
-            </p>
-            {analysis.managementSentiment && analysis.managementSentiment !== "unknown" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                <SentimentBadge sentiment={analysis.managementSentiment} />
-                {analysis.managementSentimentDetail && (
-                  <div style={{ fontSize: "11px", color: "#94a3b8", lineHeight: "1.55" }}>
-                    {analysis.managementSentimentDetail}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+  // ── Success ───────────────────────────────────────────────────────────────
+  if (!analysis) return null;
 
-        {/* ── Year on year ── */}
-        {analysis.yearOnYearNarrative && (
-          <div>
-            <Label>Year on Year Analysis</Label>
-            <p style={{ fontSize: "13px", color: "#334155", lineHeight: "1.7", margin: 0 }}>
-              {analysis.yearOnYearNarrative}
-            </p>
-          </div>
-        )}
+  const snap = analysis.financialSnapshot;
+  const audit = analysis.auditOpinion;
+  const gc = analysis.goingConcern;
+  const dl = analysis.directorLoans;
+  const rpt = analysis.relatedPartyTransactions;
 
-        {/* ── Risks ── */}
-        {analysis.risks.length > 0 && (
+  const snapFields: { label: string; value: number | null | undefined }[] = snap
+    ? [
+        { label: "Revenue", value: snap.revenue },
+        { label: "Gross Profit", value: snap.grossProfit },
+        { label: "Operating Profit", value: snap.operatingProfit },
+        { label: "Net Profit", value: snap.netProfit },
+        { label: "Cash", value: snap.cash },
+        { label: "Net Assets", value: snap.netAssets },
+        { label: "Total Debt", value: snap.totalDebt },
+        { label: "Employees", value: snap.employeeCount },
+      ]
+    : [];
+  const visibleSnap = snapFields.filter((f) => f.value !== null && f.value !== undefined);
+
+  return (
+    <div style={CARD}>
+      <CardHeader badge={<Pill label="✓ Analysis complete" color="#059669" bg="rgba(5,150,105,0.08)" />} />
+
+      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "20px" }}>
+
+        {/* ── Financial Snapshot ── */}
+        {visibleSnap.length > 0 && (
           <div>
-            <Label>Risks Identified ({analysis.risks.length})</Label>
-            <div style={{ display: "flex", gap: "12px", marginBottom: "10px", fontSize: "12px", fontWeight: "600" }}>
-              {(["high", "medium", "low"] as const).map((sev) => {
-                const count = analysis.risks.filter((r) => r.severity === sev).length;
-                const color = sev === "high" ? "#dc2626" : sev === "medium" ? "#d97706" : "#4f46e5";
-                return (
-                  <span key={sev} style={{ color }}>
-                    {count} {sev}
-                  </span>
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {analysis.risks.map((risk, i) => {
-                const borderColor = risk.severity === "high" ? "#dc2626" : risk.severity === "medium" ? "#d97706" : "#4f46e5";
-                const bgColor = risk.severity === "high" ? "rgba(220,38,38,0.05)" : risk.severity === "medium" ? "rgba(217,119,6,0.05)" : "rgba(79,70,229,0.05)";
-                return (
+            <Label>Financial Snapshot</Label>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "8px",
+              }}
+            >
+              {visibleSnap.map(({ label, value }) => (
+                <div
+                  key={label}
+                  style={{
+                    backgroundColor: "#f8fafc",
+                    borderRadius: "8px",
+                    padding: "10px 12px",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
                   <div
-                    key={i}
                     style={{
-                      borderLeft: `3px solid ${borderColor}`,
-                      backgroundColor: bgColor,
-                      borderRadius: "0 8px 8px 0",
-                      padding: "10px 14px",
+                      fontSize: "10px",
+                      fontWeight: "600",
+                      color: "#94a3b8",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      marginBottom: "4px",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "5px" }}>
-                      <SeverityBadge severity={risk.severity} />
-                      <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
-                        {risk.title}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "12px", color: "#475569", lineHeight: "1.55" }}>
-                      {risk.detail}
-                    </div>
+                    {label}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Director loans ── */}
-        {analysis.directorLoans?.present && (
-          <div>
-            <Label>Director Loans</Label>
-            <AlertBox color="#92400e" bg="rgba(217,119,6,0.06)" border="#d97706" title="Director Loans Identified">
-              {analysis.directorLoans.detail}
-              {analysis.directorLoans.totalValue !== null && (
-                <div style={{ marginTop: "6px", fontWeight: "600", color: "#92400e" }}>
-                  Total value: {fmtCurrency(analysis.directorLoans.totalValue, currency)}
+                  <div
+                    style={{
+                      fontSize: "15px",
+                      fontWeight: "800",
+                      color:
+                        label === "Employees"
+                          ? "#0f172a"
+                          : (value ?? 0) < 0
+                          ? "#dc2626"
+                          : "#0f172a",
+                      lineHeight: "1.2",
+                    }}
+                  >
+                    {label === "Employees"
+                      ? (value ?? 0).toLocaleString("en-GB")
+                      : fmtCurrency(value)}
+                  </div>
                 </div>
-              )}
-            </AlertBox>
-          </div>
-        )}
-
-        {/* ── Related party transactions ── */}
-        {analysis.relatedPartyTransactions?.present && (
-          <div>
-            <Label>Related Party Transactions</Label>
-            <AlertBox color="#92400e" bg="rgba(217,119,6,0.06)" border="#d97706" title="Related Party Transactions">
-              {analysis.relatedPartyTransactions.detail}
-            </AlertBox>
-          </div>
-        )}
-
-        {/* ── Legal proceedings ── */}
-        {analysis.legalProceedings?.present && (
-          <div>
-            <Label>Legal Proceedings</Label>
-            <AlertBox color="#7f1d1d" bg="rgba(220,38,38,0.05)" border="#dc2626" title="⚖ Legal Proceedings">
-              {analysis.legalProceedings.detail}
-            </AlertBox>
-          </div>
-        )}
-
-        {/* ── Cyber & operational risk ── */}
-        {analysis.cyberOrOperationalRisk?.present && (
-          <div>
-            <Label>Cyber &amp; Operational Risk</Label>
-            <AlertBox color="#7f1d1d" bg="rgba(220,38,38,0.05)" border="#dc2626" title="🔒 Cyber & Operational Risk">
-              {analysis.cyberOrOperationalRisk.detail}
-            </AlertBox>
-          </div>
-        )}
-
-        {/* ── Cash flow intelligence ── */}
-        {analysis.cashFlowAnalysis && (
-          <div>
-            <Label>Cash Flow Intelligence</Label>
-            <div
-              style={{
-                backgroundColor: "#f8fafc",
-                borderRadius: "8px",
-                border: "1px solid #e2e8f0",
-                overflow: "hidden",
-              }}
-            >
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {analysis.cashFlowAnalysis.operatingCashFlow !== null && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "9px 12px",
-                      borderBottom: "1px solid #f1f5f9",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <span style={{ color: "#475569" }}>Operating cash flow</span>
-                    <span
-                      style={{
-                        fontWeight: "600",
-                        color: (analysis.cashFlowAnalysis.operatingCashFlow ?? 0) >= 0 ? "#059669" : "#dc2626",
-                      }}
-                    >
-                      {fmtCurrency(analysis.cashFlowAnalysis.operatingCashFlow, currency)}
-                    </span>
-                  </div>
-                )}
-                {analysis.cashFlowAnalysis.freeCashFlow !== null && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "9px 12px",
-                      borderBottom: "1px solid #f1f5f9",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <span style={{ color: "#475569" }}>Free cash flow</span>
-                    <span
-                      style={{
-                        fontWeight: "600",
-                        color: (analysis.cashFlowAnalysis.freeCashFlow ?? 0) >= 0 ? "#059669" : "#dc2626",
-                      }}
-                    >
-                      {fmtCurrency(analysis.cashFlowAnalysis.freeCashFlow, currency)}
-                    </span>
-                  </div>
-                )}
-                {analysis.cashFlowAnalysis.cashBurnMonthly !== null && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "9px 12px",
-                      borderBottom: "1px solid #f1f5f9",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <span style={{ color: "#475569" }}>Monthly cash burn</span>
-                    <span style={{ fontWeight: "600", color: "#dc2626" }}>
-                      {fmtCurrency(analysis.cashFlowAnalysis.cashBurnMonthly, currency)}
-                    </span>
-                  </div>
-                )}
-                {runway !== null && (
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "9px 12px",
-                      borderBottom: analysis.cashFlowAnalysis.detail ? "1px solid #f1f5f9" : "none",
-                      fontSize: "12px",
-                    }}
-                  >
-                    <span style={{ color: "#475569" }}>Estimated runway</span>
-                    <span style={{ fontWeight: "700", color: runwayColor }}>
-                      {runway} months
-                    </span>
-                  </div>
-                )}
-                {analysis.cashFlowAnalysis.detail && (
-                  <div style={{ padding: "10px 12px", fontSize: "12px", color: "#475569", lineHeight: "1.6" }}>
-                    {analysis.cashFlowAnalysis.detail}
-                  </div>
-                )}
-              </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* ── Revenue concentration ── */}
-        {analysis.revenueConcentration?.concentrated === true && (
+        {/* ── Key Movements ── */}
+        {(analysis.keyMovements ?? []).length > 0 && (
           <div>
-            <Label>Revenue Concentration</Label>
-            <AlertBox color="#92400e" bg="rgba(217,119,6,0.06)" border="#d97706" title="Revenue Concentration Risk">
-              {analysis.revenueConcentration.detail}
-            </AlertBox>
+            <Label>Key Movements</Label>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: "16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "5px",
+              }}
+            >
+              {(analysis.keyMovements ?? []).map((movement, i) => (
+                <li key={i} style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}>
+                  {movement}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {/* ── Sector context ── */}
-        {analysis.sectorBenchmarkCommentary && (
+        {/* ── Items for Attention ── */}
+        {(analysis.itemsForAttention ?? []).length > 0 && (
           <div>
-            <Label>Sector Context</Label>
-            <div
-              style={{
-                borderLeft: "3px solid #4f46e5",
-                backgroundColor: "rgba(79,70,229,0.04)",
-                borderRadius: "0 8px 8px 0",
-                padding: "12px 14px",
-                fontSize: "12px",
-                color: "#334155",
-                lineHeight: "1.6",
-              }}
-            >
-              {analysis.sectorBenchmarkCommentary}
+            <Label>Items for Attention</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {(analysis.itemsForAttention ?? []).map((item, i) => (
+                <div
+                  key={i}
+                  style={{
+                    backgroundColor: "rgba(217,119,6,0.06)",
+                    border: "1px solid rgba(217,119,6,0.25)",
+                    borderRadius: "8px",
+                    padding: "12px 14px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      color: "#92400e",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    {item.heading}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
+                    {item.detail}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* ── Key events ── */}
-        {analysis.keyEvents.length > 0 && (
+        {/* ── Key Events ── */}
+        {(analysis.keyEvents ?? []).length > 0 && (
           <div>
             <Label>Key Events</Label>
             <ul
@@ -826,7 +425,7 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
                 gap: "5px",
               }}
             >
-              {analysis.keyEvents.map((event, i) => (
+              {(analysis.keyEvents ?? []).map((event, i) => (
                 <li key={i} style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}>
                   {event}
                 </li>
@@ -835,31 +434,132 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
           </div>
         )}
 
-        {/* ── Conclusion / Assessment ── */}
-        {analysis.conclusion && (
-          <div
-            style={{
-              backgroundColor: "#f8fafc",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              padding: "14px 16px",
-            }}
-          >
+        {/* ── Management Commentary ── */}
+        {analysis.managementCommentary && (
+          <div>
+            <Label>Management Commentary</Label>
             <div
               style={{
-                fontSize: "10px",
-                fontWeight: "700",
-                color: "#94a3b8",
-                letterSpacing: "0.07em",
-                textTransform: "uppercase",
-                marginBottom: "8px",
+                borderLeft: "3px solid #4f46e5",
+                backgroundColor: "rgba(79,70,229,0.04)",
+                borderRadius: "0 8px 8px 0",
+                padding: "12px 14px",
+                fontSize: "13px",
+                color: "#334155",
+                lineHeight: "1.65",
+                fontStyle: "italic",
               }}
             >
-              Assessment
+              {analysis.managementCommentary}
             </div>
-            <p style={{ fontSize: "13px", color: "#334155", lineHeight: "1.7", margin: 0 }}>
-              {analysis.conclusion}
-            </p>
+          </div>
+        )}
+
+        {/* ── Audit Opinion ── */}
+        {audit && (
+          <div>
+            <Label>Audit Opinion</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <AuditBadge opinion={audit.opinion} />
+                {audit.auditorChanged === true && (
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      color: "#dc2626",
+                      backgroundColor: "rgba(220,38,38,0.08)",
+                      padding: "3px 8px",
+                      borderRadius: "100px",
+                      border: "1px solid rgba(220,38,38,0.25)",
+                    }}
+                  >
+                    ⚠ Auditor changed this year
+                  </span>
+                )}
+              </div>
+              {audit.auditorName && (
+                <div style={{ fontSize: "12px", color: "#64748b" }}>
+                  Audited by{" "}
+                  <span style={{ fontWeight: "600", color: "#0f172a" }}>{audit.auditorName}</span>
+                </div>
+              )}
+              {audit.emphasisOfMatter && (
+                <div
+                  style={{
+                    backgroundColor: "rgba(217,119,6,0.07)",
+                    border: "1px solid rgba(217,119,6,0.25)",
+                    borderRadius: "6px",
+                    padding: "10px 12px",
+                    marginTop: "2px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: "700",
+                      color: "#d97706",
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Emphasis of Matter
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
+                    {audit.emphasisOfMatter}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Going Concern ── */}
+        {gc?.flagged && (
+          <div
+            style={{
+              backgroundColor: "rgba(217,119,6,0.07)",
+              border: "1px solid rgba(217,119,6,0.30)",
+              borderRadius: "8px",
+              padding: "12px 14px",
+            }}
+          >
+            <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+              <span style={{ fontSize: "16px", flexShrink: 0 }}>⚠️</span>
+              <div>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "#92400e",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Going Concern Note
+                </div>
+                <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
+                  {gc.detail ||
+                    "The accounts include a going concern note or material uncertainty disclosure."}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Director Loans ── */}
+        {dl?.present && dl.detail && (
+          <div>
+            <Label>Director Loans</Label>
+            <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{dl.detail}</div>
+          </div>
+        )}
+
+        {/* ── Related Party Transactions ── */}
+        {rpt?.present && rpt.detail && (
+          <div>
+            <Label>Related Party Transactions</Label>
+            <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{rpt.detail}</div>
           </div>
         )}
 
