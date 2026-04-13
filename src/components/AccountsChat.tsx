@@ -2,7 +2,10 @@
 
 console.error("AccountsChat module evaluated");
 
-export default function AccountsChat(_props: { companyNumber: string; companyName: string }) {
+export default function AccountsChat(_props: {
+  companyNumber: string;
+  companyName: string;
+}) {
   console.error("AccountsChat rendering");
 
   try {
