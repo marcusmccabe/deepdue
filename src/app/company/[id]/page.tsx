@@ -5,12 +5,18 @@ import {
   getCompany,
   getOfficers,
   getFilingHistory,
+  getCharges,
+  getPSCs,
+  getOfficerAppointments,
   formatAddress,
   formatDate,
   formatFilingDescription,
   companyTypeLabel,
   type CHOfficer,
   type CHFiling,
+  type CHCharge,
+  type CHPsc,
+  type CHAppointment,
 } from "@/lib/companies-house";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
 
@@ -164,14 +170,16 @@ export default async function CompanyPage({
   const { id } = await params;
   const companyNumber = id.toUpperCase();
 
-  // Fetch all data in parallel; profile 404 = show not-found
-  const [company, officersResult, filingsResult] = await Promise.all([
+  // Phase 1: fetch all independent data in parallel; profile 404 = show not-found
+  const [company, officersResult, filingsResult, chargesResult, pscsResult] = await Promise.all([
     getCompany(companyNumber).catch(() => null),
     getOfficers(companyNumber).catch(() => ({ items: [] as CHOfficer[], total_results: 0 })),
     getFilingHistory(companyNumber).catch(() => ({
       items: [] as CHFiling[],
       total_count: 0,
     })),
+    getCharges(companyNumber).catch(() => ({ items: [] as CHCharge[], total_count: 0 })),
+    getPSCs(companyNumber).catch(() => ({ items: [] as CHPsc[], total_results: 0 })),
   ]);
 
   if (!company) notFound();
@@ -180,6 +188,43 @@ export default async function CompanyPage({
     (o) => !o.resigned_on
   );
   const filings = filingsResult.items ?? [];
+  const charges = chargesResult.items ?? [];
+  const activePscs = (pscsResult.items ?? []).filter((p) => !p.ceased_on);
+
+  // Phase 2: fetch officer appointments (depends on officers from phase 1)
+  const appointmentsData = await Promise.all(
+    currentOfficers.slice(0, 5).map(async (officer) => {
+      const path = officer.links?.officer?.appointments;
+      if (!path) return { officer, appointments: [] as CHAppointment[] };
+      try {
+        const result = await getOfficerAppointments(path);
+        return { officer, appointments: result.items ?? [] };
+      } catch {
+        return { officer, appointments: [] as CHAppointment[] };
+      }
+    })
+  );
+
+  // Gazette detection — scan filings + company flags
+  const GAZETTE_TYPE_RE = /^(GAZ|DISS|AM0[1-9]|LIQD?|WU0|IN0)/i;
+  const GAZETTE_DESC_RE = /gazette|insolvency|liquidat|winding.up|struck.off|dissolution|administration/i;
+  const gazetteFilings = filings.filter(
+    (f) =>
+      (f.type && GAZETTE_TYPE_RE.test(f.type)) ||
+      (f.description && GAZETTE_DESC_RE.test(f.description))
+  );
+  const hasGazetteWarning =
+    !!company?.has_insolvency_history ||
+    !!company?.has_been_liquidated ||
+    gazetteFilings.length > 0;
+  const gazetteReasons: string[] = [];
+  if (company?.has_been_liquidated) gazetteReasons.push("Company has been liquidated");
+  if (company?.has_insolvency_history) gazetteReasons.push("Insolvency history recorded");
+  gazetteFilings.forEach((f) =>
+    gazetteReasons.push(
+      `Filing ${f.type ?? "—"}: ${formatFilingDescription(f.description, f.description_values)} (${formatDate(f.date)})`
+    )
+  );
 
   const chWebUrl = `https://find-and-update.company-information.service.gov.uk/company/${companyNumber}`;
 
@@ -352,6 +397,69 @@ export default async function CompanyPage({
             </a>
           </div>
         </div>
+
+        {/* ── Gazette / Insolvency warning banner ── */}
+        {hasGazetteWarning && (
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "14px 18px",
+              backgroundColor: "rgba(220,38,38,0.06)",
+              border: "1px solid rgba(220,38,38,0.25)",
+              borderRadius: "10px",
+              borderLeft: "4px solid #dc2626",
+              display: "flex",
+              gap: "12px",
+              alignItems: "flex-start",
+            }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+              style={{ flexShrink: 0, marginTop: "1px" }}
+            >
+              <path
+                d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495Z"
+                stroke="#dc2626"
+                strokeWidth="1.5"
+              />
+              <path
+                d="M10 8v3m0 2.5v.5"
+                stroke="#dc2626"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+            <div>
+              <div
+                style={{
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  color: "#dc2626",
+                  marginBottom: "5px",
+                }}
+              >
+                Gazette / Insolvency Notice Detected
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                  fontSize: "12px",
+                  color: "#475569",
+                }}
+              >
+                {gazetteReasons.map((r, i) => (
+                  <span key={i}>{r}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Two-column grid ── */}
         <div
@@ -541,6 +649,266 @@ export default async function CompanyPage({
                       </a>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Charges Register ── */}
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Charges Register</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  {charges.length} {charges.length === 1 ? "charge" : "charges"}
+                </span>
+              </div>
+              {charges.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No charges registered
+                </div>
+              ) : (
+                <div>
+                  {charges.map((charge, i) => {
+                    const isOutstanding = charge.status === "outstanding";
+                    const isPartSatisfied = charge.status === "part-satisfied";
+                    const statusColor = isOutstanding ? "#dc2626" : isPartSatisfied ? "#d97706" : "#059669";
+                    const statusBg = isOutstanding ? "rgba(220,38,38,0.10)" : isPartSatisfied ? "rgba(217,119,6,0.10)" : "rgba(5,150,105,0.10)";
+                    const statusBorder = isOutstanding ? "rgba(220,38,38,0.25)" : isPartSatisfied ? "rgba(217,119,6,0.25)" : "rgba(5,150,105,0.25)";
+                    return (
+                      <div
+                        key={charge.charge_code ?? i}
+                        style={{
+                          padding: "13px 18px",
+                          borderBottom: i < charges.length - 1 ? "1px solid #f1f5f9" : "none",
+                          borderLeft: isOutstanding ? "3px solid #dc2626" : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "3px" }}>
+                              {charge.persons_entitled?.[0]?.name ?? "Unknown lender"}
+                              {(charge.persons_entitled?.length ?? 0) > 1 && (
+                                <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "400", marginLeft: "6px" }}>
+                                  +{(charge.persons_entitled?.length ?? 1) - 1} more
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#475569" }}>
+                              {charge.classification?.description ?? "Registered charge"}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                borderRadius: "100px",
+                                fontSize: "11px",
+                                fontWeight: "600",
+                                color: statusColor,
+                                backgroundColor: statusBg,
+                                border: `1px solid ${statusBorder}`,
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {(charge.status ?? "unknown").replace(/-/g, " ")}
+                            </span>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                              {formatDate(charge.created_on)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── PSC / Shareholder Structure ── */}
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Persons with Significant Control</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  {activePscs.length} PSC{activePscs.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              {activePscs.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No PSC information available
+                </div>
+              ) : (
+                <div>
+                  {activePscs.map((psc, i) => {
+                    const isCorporate =
+                      psc.kind?.includes("corporate") || psc.kind?.includes("legal-person");
+                    const ukJurisdictions = ["england", "wales", "scotland", "northern ireland", "united kingdom", "great britain", "england and wales"];
+                    const residenceCountry = (
+                      psc.country_of_residence ??
+                      psc.identification?.country_registered ??
+                      psc.address?.country ??
+                      ""
+                    ).toLowerCase().trim();
+                    const isOffshore =
+                      !!residenceCountry &&
+                      !ukJurisdictions.some((j) => residenceCountry.includes(j));
+                    const ownershipBand = (() => {
+                      const share = psc.natures_of_control?.find((n) => n.includes("ownership-of-shares"));
+                      if (!share) return null;
+                      if (share.includes("25-to-50")) return "25–50%";
+                      if (share.includes("50-to-75")) return "50–75%";
+                      if (share.includes("75-to-100")) return "75–100%";
+                      if (share.includes("more-than-25")) return ">25%";
+                      return null;
+                    })();
+                    const natureSummary = psc.natures_of_control
+                      ?.map((n) =>
+                        n
+                          .replace(/-/g, " ")
+                          .replace(/\b(\w)/g, (c) => c.toUpperCase())
+                          .replace("25 To 50 Percent", "25–50%")
+                          .replace("50 To 75 Percent", "50–75%")
+                          .replace("75 To 100 Percent", "75–100%")
+                          .replace("More Than 25 Percent", ">25%")
+                          .replace("Significant Influence Or Control", "Significant Influence / Control")
+                      )
+                      .join(" · ");
+                    return (
+                      <div
+                        key={psc.name ?? i}
+                        style={{
+                          padding: "13px 18px",
+                          borderBottom: i < activePscs.length - 1 ? "1px solid #f1f5f9" : "none",
+                          borderLeft: isOffshore
+                            ? "3px solid #d97706"
+                            : isCorporate
+                            ? "3px solid #4f46e5"
+                            : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "4px", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
+                                {psc.name ?? "Unknown"}
+                              </span>
+                              {isCorporate && (
+                                <span style={{ fontSize: "10px", fontWeight: "600", color: "#4f46e5", backgroundColor: "rgba(79,70,229,0.08)", padding: "1px 6px", borderRadius: "4px" }}>
+                                  Corporate
+                                </span>
+                              )}
+                              {isOffshore && (
+                                <span style={{ fontSize: "10px", fontWeight: "600", color: "#d97706", backgroundColor: "rgba(217,119,6,0.10)", padding: "1px 6px", borderRadius: "4px" }}>
+                                  Offshore
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#475569" }}>
+                              {natureSummary ?? "—"}
+                            </div>
+                          </div>
+                          {ownershipBand && (
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ownership</div>
+                              <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginTop: "2px" }}>{ownershipBand}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── Director Network (Layer 2 cross-reference) ── */}
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Director Network</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  Layer 2 cross-reference
+                </span>
+              </div>
+              {appointmentsData.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No director appointment data available
+                </div>
+              ) : (
+                <div>
+                  {appointmentsData.map(({ officer, appointments }, i) => {
+                    const otherCompanies = appointments.filter(
+                      (a) => a.appointed_to?.company_number !== companyNumber
+                    );
+                    if (otherCompanies.length === 0) return null;
+                    return (
+                      <div
+                        key={`${officer.name}-${i}`}
+                        style={{
+                          padding: "13px 18px",
+                          borderBottom: i < appointmentsData.length - 1 ? "1px solid #f1f5f9" : "none",
+                        }}
+                      >
+                        <div style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", marginBottom: "8px" }}>
+                          {officer.name}
+                          <span style={{ fontSize: "11px", fontWeight: "400", color: "#94a3b8", marginLeft: "6px" }}>
+                            {otherCompanies.length} other appointment{otherCompanies.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                          {otherCompanies.slice(0, 10).map((appt, j) => {
+                            const isDissolved = appt.appointed_to?.company_status === "dissolved";
+                            const isStrikeOff = appt.appointed_to?.company_status === "active-proposal-to-strike-off";
+                            const isRisk = isDissolved || isStrikeOff;
+                            return (
+                              <div
+                                key={j}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  gap: "10px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "12px",
+                                    color: isRisk ? "#dc2626" : "#475569",
+                                    fontWeight: isRisk ? "500" : "400",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {appt.appointed_to?.company_name ?? "Unknown company"}
+                                </span>
+                                {isRisk && (
+                                  <span
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: "600",
+                                      color: "#dc2626",
+                                      backgroundColor: "rgba(220,38,38,0.10)",
+                                      border: "1px solid rgba(220,38,38,0.25)",
+                                      padding: "1px 6px",
+                                      borderRadius: "4px",
+                                      whiteSpace: "nowrap",
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {isDissolved ? "Dissolved" : "Proposed strike-off"}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {otherCompanies.length > 10 && (
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
+                              +{otherCompanies.length - 10} more on Companies House
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

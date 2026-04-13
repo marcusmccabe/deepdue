@@ -65,6 +65,10 @@ export interface CHOfficer {
   occupation?: string;
   address?: CHAddress;
   date_of_birth?: { month: number; year: number };
+  links?: {
+    officer?: { appointments?: string };
+    self?: string;
+  };
 }
 
 export interface CHOfficersResponse {
@@ -89,6 +93,71 @@ export interface CHFiling {
 export interface CHFilingHistoryResponse {
   items: CHFiling[];
   total_count: number;
+}
+
+export interface CHCharge {
+  charge_code?: string;
+  classification?: { description?: string };
+  created_on?: string;
+  delivered_on?: string;
+  resolved_on?: string;
+  status?: string; // "outstanding" | "satisfied" | "fully-satisfied" | "part-satisfied"
+  secured_details?: { description?: string };
+  particulars?: { description?: string };
+  persons_entitled?: Array<{ name: string }>;
+}
+
+export interface CHChargesResponse {
+  items: CHCharge[];
+  total_count: number;
+  unfiltered_count?: number;
+  part_satisfied_count?: number;
+  satisfied_count?: number;
+}
+
+export interface CHPsc {
+  name?: string;
+  kind?: string; // "individual-person-with-significant-control" | "corporate-entity-..." | "legal-person-..."
+  natures_of_control?: string[];
+  notified_on?: string;
+  ceased_on?: string;
+  address?: CHAddress;
+  country_of_residence?: string;
+  nationality?: string;
+  date_of_birth?: { month: number; year: number };
+  identification?: {
+    legal_authority?: string;
+    legal_form?: string;
+    place_registered?: string;
+    registration_number?: string;
+    country_registered?: string;
+  };
+}
+
+export interface CHPscResponse {
+  items: CHPsc[];
+  total_results: number;
+  active_count?: number;
+  ceased_count?: number;
+}
+
+export interface CHAppointment {
+  appointed_on?: string;
+  resigned_on?: string;
+  officer_role?: string;
+  name?: string;
+  appointed_to?: {
+    company_name?: string;
+    company_number?: string;
+    company_status?: string;
+  };
+}
+
+export interface CHAppointmentsResponse {
+  items: CHAppointment[];
+  total_results: number;
+  active_count?: number;
+  resigned_count?: number;
 }
 
 // ── API calls ────────────────────────────────────────────────────────────────
@@ -148,6 +217,54 @@ export async function getFilingHistory(
     return await res.json();
   } catch {
     throw new Error("Failed to parse filings response");
+  }
+}
+
+export async function getCharges(
+  companyNumber: string
+): Promise<CHChargesResponse> {
+  const res = await chFetch(
+    `/company/${companyNumber}/charges?items_per_page=25`,
+    { cache: "no-store" }
+  );
+  if (res.status === 404) return { items: [], total_count: 0 };
+  if (!res.ok) throw new Error(`CH charges error ${res.status}`);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse charges response");
+  }
+}
+
+export async function getPSCs(
+  companyNumber: string
+): Promise<CHPscResponse> {
+  const res = await chFetch(
+    `/company/${companyNumber}/persons-with-significant-control?items_per_page=25`,
+    { cache: "no-store" }
+  );
+  if (res.status === 404) return { items: [], total_results: 0 };
+  if (!res.ok) throw new Error(`CH PSC error ${res.status}`);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse PSC response");
+  }
+}
+
+export async function getOfficerAppointments(
+  appointmentsPath: string
+): Promise<CHAppointmentsResponse> {
+  const res = await chFetch(
+    `${appointmentsPath}?items_per_page=50`,
+    { cache: "no-store" }
+  );
+  if (res.status === 404) return { items: [], total_results: 0 };
+  if (!res.ok) throw new Error(`CH appointments error ${res.status}`);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error("Failed to parse appointments response");
   }
 }
 
