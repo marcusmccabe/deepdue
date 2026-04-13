@@ -189,6 +189,22 @@ export default async function CompanyPage({
   );
   const filings = filingsResult.items ?? [];
   const charges = chargesResult.items ?? [];
+  // Group by lender + charge type; CH returns charges date-desc so first entry per key is newest
+  const groupedCharges = (() => {
+    const map = new Map<string, { charge: CHCharge; count: number }>();
+    for (const charge of charges) {
+      const lender = charge.persons_entitled?.[0]?.name ?? "Unknown lender";
+      const chargeType = charge.classification?.description ?? "Registered charge";
+      const key = `${lender}||${chargeType}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(key, { charge, count: 1 });
+      }
+    }
+    return Array.from(map.values());
+  })();
   const activePscs = (pscsResult.items ?? []).filter((p) => !p.ceased_on);
 
   // Phase 2: fetch officer appointments (depends on officers from phase 1)
@@ -220,11 +236,16 @@ export default async function CompanyPage({
   const gazetteReasons: string[] = [];
   if (company?.has_been_liquidated) gazetteReasons.push("Company has been liquidated");
   if (company?.has_insolvency_history) gazetteReasons.push("Insolvency history recorded");
-  gazetteFilings.forEach((f) =>
+  // Deduplicate by type code — filings arrive date-desc, so first match is most recent
+  const seenGazetteTypes = new Set<string>();
+  gazetteFilings.forEach((f) => {
+    const key = f.type ?? f.description ?? "unknown";
+    if (seenGazetteTypes.has(key)) return;
+    seenGazetteTypes.add(key);
     gazetteReasons.push(
       `Filing ${f.type ?? "—"}: ${formatFilingDescription(f.description, f.description_values)} (${formatDate(f.date)})`
-    )
-  );
+    );
+  });
 
   const chWebUrl = `https://find-and-update.company-information.service.gov.uk/company/${companyNumber}`;
 
@@ -667,28 +688,29 @@ export default async function CompanyPage({
                 </div>
               ) : (
                 <div>
-                  {charges.map((charge, i) => {
+                  {groupedCharges.map(({ charge, count }, i) => {
                     const isOutstanding = charge.status === "outstanding";
                     const isPartSatisfied = charge.status === "part-satisfied";
                     const statusColor = isOutstanding ? "#dc2626" : isPartSatisfied ? "#d97706" : "#059669";
                     const statusBg = isOutstanding ? "rgba(220,38,38,0.10)" : isPartSatisfied ? "rgba(217,119,6,0.10)" : "rgba(5,150,105,0.10)";
                     const statusBorder = isOutstanding ? "rgba(220,38,38,0.25)" : isPartSatisfied ? "rgba(217,119,6,0.25)" : "rgba(5,150,105,0.25)";
+                    const lenderName = charge.persons_entitled?.[0]?.name ?? "Unknown lender";
                     return (
                       <div
                         key={charge.charge_code ?? i}
                         style={{
                           padding: "13px 18px",
-                          borderBottom: i < charges.length - 1 ? "1px solid #f1f5f9" : "none",
+                          borderBottom: i < groupedCharges.length - 1 ? "1px solid #f1f5f9" : "none",
                           borderLeft: isOutstanding ? "3px solid #dc2626" : "none",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "3px" }}>
-                              {charge.persons_entitled?.[0]?.name ?? "Unknown lender"}
-                              {(charge.persons_entitled?.length ?? 0) > 1 && (
+                              {lenderName}
+                              {count > 1 && (
                                 <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "400", marginLeft: "6px" }}>
-                                  +{(charge.persons_entitled?.length ?? 1) - 1} more
+                                  ({count} charges)
                                 </span>
                               )}
                             </div>
