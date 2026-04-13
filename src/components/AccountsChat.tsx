@@ -13,6 +13,7 @@ interface AccountsChatProps {
 }
 
 export default function AccountsChat({ companyNumber, companyName }: AccountsChatProps) {
+  console.log("AccountsChat rendering");
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",

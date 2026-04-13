@@ -941,7 +941,7 @@ export default async function CompanyPage({
           </div>
 
           {/* ═══ RIGHT COLUMN ═══ */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px", overflow: "visible" }}>
 
             {/* Company Details card */}
             <div style={{ ...CARD, overflow: "visible" }}>
@@ -1076,18 +1076,11 @@ export default async function CompanyPage({
               <HealthRing />
             </div>
 
-            {/* TEMP DIAGNOSTIC */}
-            <div style={{ backgroundColor: "#dc2626", color: "#ffffff", padding: "10px 14px", borderRadius: "6px", fontSize: "13px", fontWeight: "700" }}>
-              CHAT SHOULD BE BELOW THIS
-            </div>
-
             {/* Chat panel */}
-            <div style={{ position: "sticky", top: "16px" }}>
-              <AccountsChat
-                companyNumber={companyNumber}
-                companyName={company.company_name}
-              />
-            </div>
+            <AccountsChat
+              companyNumber={companyNumber}
+              companyName={company.company_name}
+            />
           </div>
         </div>
       </main>
