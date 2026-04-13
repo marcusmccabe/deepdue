@@ -16,7 +16,7 @@ interface CacheEntry {
 }
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const VERSION = "v2";
+const VERSION = "v3";
 
 const cache = new Map<string, CacheEntry>();
 
