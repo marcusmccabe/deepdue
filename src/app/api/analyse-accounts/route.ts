@@ -169,6 +169,24 @@ export async function GET(request: NextRequest) {
     ],
   });
 
+  // Log request body for debugging (base64 PDF data replaced with length)
+  try {
+    const bodyForLogging = JSON.parse(anthropicBody);
+    for (const msg of bodyForLogging.messages ?? []) {
+      for (const block of Array.isArray(msg.content) ? msg.content : []) {
+        if (block?.source?.data) {
+          block.source.data = `[${block.source.data.length} base64 chars]`;
+        }
+      }
+    }
+    console.log(
+      "[analyse-accounts] → Anthropic request body:",
+      JSON.stringify(bodyForLogging, null, 2)
+    );
+  } catch {
+    console.log("[analyse-accounts] → Anthropic request body (raw):", anthropicBody.slice(0, 500));
+  }
+
   try {
     let anthropicRes!: Response;
 
@@ -185,6 +203,7 @@ export async function GET(request: NextRequest) {
           "Content-Type": "application/json",
           "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
           "anthropic-version": "2023-06-01",
+          "anthropic-beta": "pdfs-2024-09-25",
         },
         body: anthropicBody,
       });
