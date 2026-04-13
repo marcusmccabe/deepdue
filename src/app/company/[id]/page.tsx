@@ -19,6 +19,8 @@ import {
   type CHAppointment,
 } from "@/lib/companies-house";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
+import AccountsChat from "@/components/AccountsChat";
+import { getCachedAnalysis } from "@/lib/analysis-cache";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -169,6 +171,9 @@ export default async function CompanyPage({
 }) {
   const { id } = await params;
   const companyNumber = id.toUpperCase();
+
+  // Check analysis cache server-side to determine whether the chat button should appear
+  const analysisAvailable = getCachedAnalysis(companyNumber) !== null;
 
   // Phase 1: fetch all independent data in parallel; profile 404 = show not-found
   const [company, officersResult, filingsResult, chargesResult, pscsResult] = await Promise.all([
@@ -1077,6 +1082,11 @@ export default async function CompanyPage({
           </div>
         </div>
       </main>
+      <AccountsChat
+        companyNumber={companyNumber}
+        companyName={company.company_name}
+        analysisAvailable={analysisAvailable}
+      />
     </div>
   );
 }
