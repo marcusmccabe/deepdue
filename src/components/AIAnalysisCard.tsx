@@ -279,6 +279,15 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
   const gc = analysis.goingConcern;
   const dl = analysis.directorLoans;
   const rpt = analysis.relatedPartyTransactions;
+  const si = analysis.strategicIntelligence;
+  const hasSI =
+    si &&
+    ((si.groupEntitiesMentioned ?? []).length > 0 ||
+      (si.plannedProducts ?? []).length > 0 ||
+      (si.plannedMarkets ?? []).length > 0 ||
+      (si.strategicInitiatives ?? []).length > 0 ||
+      si.competitivePositioning != null ||
+      (si.regulatoryOrLegalDevelopments ?? []).length > 0);
 
   const snapFields: { label: string; value: number | null | undefined }[] = snap
     ? [
@@ -452,6 +461,266 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
             >
               {analysis.managementCommentary}
             </div>
+          </div>
+        )}
+
+        {/* ── Strategic Intelligence ── */}
+        {hasSI && si && (
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginBottom: "12px",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "600",
+                  color: "#94a3b8",
+                  letterSpacing: "0.07em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Strategic Intelligence
+              </div>
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: "600",
+                  color: "#4f46e5",
+                  backgroundColor: "rgba(79,70,229,0.08)",
+                  padding: "2px 8px",
+                  borderRadius: "100px",
+                }}
+              >
+                Competitive insight
+              </span>
+            </div>
+
+            {/* 3a. Group & Related Entities */}
+            {(si.groupEntitiesMentioned ?? []).length > 0 && (
+              <div style={{ marginBottom: "14px" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Group &amp; Related Entities
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  {(si.groupEntitiesMentioned ?? []).map((entity: { name: string; relationship: string }, i: number) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        padding: "8px 10px",
+                        backgroundColor: "#f8fafc",
+                        borderRadius: "6px",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "700",
+                          color: "#0f172a",
+                          fontSize: "12px",
+                          flexShrink: 0,
+                          minWidth: "130px",
+                          maxWidth: "160px",
+                        }}
+                      >
+                        {entity.name}
+                      </div>
+                      <div
+                        style={{ fontSize: "12px", color: "#475569", lineHeight: "1.5" }}
+                      >
+                        {entity.relationship}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3b. Planned Products & Services */}
+            {(si.plannedProducts ?? []).length > 0 && (
+              <div style={{ marginBottom: "14px" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Planned Products &amp; Services
+                </div>
+                <div
+                  style={{
+                    borderLeft: "3px solid #4f46e5",
+                    paddingLeft: "12px",
+                  }}
+                >
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: "14px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                    }}
+                  >
+                    {(si.plannedProducts ?? []).map((product: string, i: number) => (
+                      <li
+                        key={i}
+                        style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
+                      >
+                        {product}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* 3c. Market Expansion */}
+            {(si.plannedMarkets ?? []).length > 0 && (
+              <div style={{ marginBottom: "14px" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Market Expansion
+                </div>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                  }}
+                >
+                  {(si.plannedMarkets ?? []).map((market: string, i: number) => (
+                    <li
+                      key={i}
+                      style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
+                    >
+                      {market}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 3d. Strategic Initiatives */}
+            {(si.strategicInitiatives ?? []).length > 0 && (
+              <div style={{ marginBottom: "14px" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Strategic Initiatives
+                </div>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                  }}
+                >
+                  {(si.strategicInitiatives ?? []).map((initiative: string, i: number) => (
+                    <li
+                      key={i}
+                      style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
+                    >
+                      {initiative}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 3e. Competitive Positioning */}
+            {si.competitivePositioning && (
+              <div style={{ marginBottom: "14px" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  How They Describe Themselves
+                </div>
+                <div
+                  style={{
+                    borderLeft: "3px solid #4f46e5",
+                    backgroundColor: "rgba(79,70,229,0.04)",
+                    borderRadius: "0 8px 8px 0",
+                    padding: "12px 14px",
+                    fontSize: "13px",
+                    color: "#334155",
+                    lineHeight: "1.65",
+                    fontStyle: "italic",
+                  }}
+                >
+                  {si.competitivePositioning}
+                </div>
+              </div>
+            )}
+
+            {/* 3f. Regulatory & Legal */}
+            {(si.regulatoryOrLegalDevelopments ?? []).length > 0 && (
+              <div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    color: "#64748b",
+                    marginBottom: "6px",
+                  }}
+                >
+                  Regulatory &amp; Legal
+                </div>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                  }}
+                >
+                  {(si.regulatoryOrLegalDevelopments ?? []).map((item: string, i: number) => (
+                    <li
+                      key={i}
+                      style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 

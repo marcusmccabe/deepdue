@@ -42,6 +42,20 @@ export interface RelatedPartyTransactions {
   detail: string | null;
 }
 
+export interface GroupEntity {
+  name: string;
+  relationship: string;
+}
+
+export interface StrategicIntelligence {
+  plannedProducts?: string[];
+  plannedMarkets?: string[];
+  groupEntitiesMentioned?: GroupEntity[];
+  strategicInitiatives?: string[];
+  competitivePositioning?: string | null;
+  regulatoryOrLegalDevelopments?: string[];
+}
+
 export interface AccountsAnalysis {
   financialSnapshot?: FinancialSnapshot;
   keyMovements?: string[];
@@ -52,6 +66,7 @@ export interface AccountsAnalysis {
   goingConcern?: GoingConcern;
   directorLoans?: DirectorLoans;
   relatedPartyTransactions?: RelatedPartyTransactions;
+  strategicIntelligence?: StrategicIntelligence;
   // Metadata added by our route — not part of Claude's response
   analysedAt: string;
   companyNumber: string;
