@@ -138,42 +138,74 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 5. Claude analysis ────────────────────────────────────────────────────
+  // ── 5. Claude analysis (with retry on 529 overloaded) ────────────────────
   let rawText: string;
 
-  try {
-    const anthropicRes = await fetch(ANTHROPIC_API, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4000,
-        system: SYSTEM_PROMPT,
-        messages: [
+  // Delays before each attempt: attempt 1 immediate, then 2 s / 4 s / 8 s
+  const RETRY_DELAYS_MS = [0, 2_000, 4_000, 8_000];
+
+  const anthropicBody = JSON.stringify({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: [
           {
-            role: "user",
-            content: [
-              {
-                type: "document",
-                source: {
-                  type: "base64",
-                  media_type: "application/pdf",
-                  data: pdfBase64,
-                },
-              },
-              {
-                type: "text",
-                text: "Please analyse this company accounts document.",
-              },
-            ],
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: pdfBase64,
+            },
+          },
+          {
+            type: "text",
+            text: "Please analyse this company accounts document.",
           },
         ],
-      }),
-    });
+      },
+    ],
+  });
+
+  try {
+    let anthropicRes!: Response;
+
+    for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+      if (RETRY_DELAYS_MS[attempt] > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, RETRY_DELAYS_MS[attempt])
+        );
+      }
+
+      anthropicRes = await fetch(ANTHROPIC_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+          "anthropic-version": "2023-06-01",
+        },
+        body: anthropicBody,
+      });
+
+      if (anthropicRes.status !== 529) break; // non-529 → stop retrying
+
+      console.warn(
+        `[analyse-accounts] ${companyNumber}: Anthropic overloaded (529),` +
+          ` attempt ${attempt + 1}/${RETRY_DELAYS_MS.length}`
+      );
+    }
+
+    if (anthropicRes.status === 529) {
+      return NextResponse.json(
+        {
+          error:
+            "Analysis temporarily unavailable — Anthropic API is overloaded. Please try again in a few minutes.",
+        },
+        { status: 503 }
+      );
+    }
 
     if (!anthropicRes.ok) {
       const body = await anthropicRes.text().catch(() => "");
