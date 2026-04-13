@@ -41,12 +41,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── checkOnly — lightweight cache probe, no analysis run ─────────────────
-  if (searchParams.get("checkOnly") === "true") {
-    const exists = getCachedAnalysis(companyNumber);
-    return NextResponse.json({ available: exists !== null });
-  }
-
   // ── 1. Cache check ────────────────────────────────────────────────────────
   const cached = getCachedAnalysis(companyNumber);
   if (cached) {
