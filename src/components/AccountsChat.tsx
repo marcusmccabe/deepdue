@@ -15,7 +15,9 @@ export default function AccountsChat({
   companyNumber: string;
   companyName: string;
 }) {
-  const [mounted, setMounted] = useState(false);
+  // Imperative portal container — position:fixed is applied via DOM API,
+  // completely immune to Tailwind's * selector and any stylesheet.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -27,13 +29,32 @@ export default function AccountsChat({
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const el = document.createElement("div");
+    // Set position via DOM API — cannot be overridden by any CSS rule
+    el.style.position = "fixed";
+    el.style.bottom = "24px";
+    el.style.right = "24px";
+    el.style.zIndex = "9999";
+    el.style.display = "flex";
+    el.style.flexDirection = "column";
+    el.style.alignItems = "flex-end";
+    document.body.appendChild(el);
+    setContainer(el);
+    return () => {
+      if (document.body.contains(el)) document.body.removeChild(el);
+    };
+  }, []);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages, loading]);
 
-  if (!mounted) return null;
+  // Nothing until the container is mounted into the real DOM
+  if (!container) return null;
 
   async function send() {
     const text = input.trim();
@@ -56,31 +77,28 @@ export default function AccountsChat({
         }),
       });
       const data = await res.json();
-      const reply = data.reply || data.error || "Sorry, I couldn't retrieve an answer. Please try again.";
+      const reply =
+        data.reply ||
+        data.error ||
+        "Sorry, I couldn't retrieve an answer. Please try again.";
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, I couldn't retrieve an answer. Please try again." },
+        {
+          role: "assistant",
+          content: "Sorry, I couldn't retrieve an answer. Please try again.",
+        },
       ]);
     } finally {
       setLoading(false);
     }
   }
 
+  // The portal renders into the fixed container we created above.
+  // No position:fixed needed here — the container itself is fixed.
   return createPortal(
-    <div
-      style={{
-        position: "fixed",
-        bottom: "24px",
-        right: "24px",
-        zIndex: 50,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-end",
-      }}
-    >
-      {/* Keyframes for typing dots */}
+    <>
       <style>{`
         @keyframes acDotBounce {
           0%, 80%, 100% { transform: translateY(0); }
@@ -127,7 +145,9 @@ export default function AccountsChat({
               >
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
-              <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
+              <span
+                style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}
+              >
                 Ask about these accounts
               </span>
             </div>
@@ -180,15 +200,20 @@ export default function AccountsChat({
                 key={i}
                 style={{
                   display: "flex",
-                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                  justifyContent:
+                    msg.role === "user" ? "flex-end" : "flex-start",
                 }}
               >
                 <div
                   style={{
                     maxWidth: "85%",
                     padding: "10px 14px",
-                    borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                    backgroundColor: msg.role === "user" ? "#4f46e5" : "#f1f5f9",
+                    borderRadius:
+                      msg.role === "user"
+                        ? "14px 14px 4px 14px"
+                        : "14px 14px 14px 4px",
+                    backgroundColor:
+                      msg.role === "user" ? "#4f46e5" : "#f1f5f9",
                     color: msg.role === "user" ? "#ffffff" : "#0f172a",
                     fontSize: "13px",
                     lineHeight: "1.5",
@@ -223,7 +248,9 @@ export default function AccountsChat({
                         height: "6px",
                         borderRadius: "50%",
                         backgroundColor: "#94a3b8",
-                        animation: `acDotBounce 1.2s ease-in-out ${i * 0.15}s infinite`,
+                        animation: `acDotBounce 1.2s ease-in-out ${
+                          i * 0.15
+                        }s infinite`,
                       }}
                     />
                   ))}
@@ -271,7 +298,8 @@ export default function AccountsChat({
                 padding: "9px 14px",
                 borderRadius: "8px",
                 border: "none",
-                backgroundColor: loading || !input.trim() ? "#cbd5e1" : "#4f46e5",
+                backgroundColor:
+                  loading || !input.trim() ? "#cbd5e1" : "#4f46e5",
                 color: "#ffffff",
                 fontSize: "13px",
                 fontWeight: "600",
@@ -333,7 +361,7 @@ export default function AccountsChat({
           </svg>
         )}
       </button>
-    </div>,
-    document.body
+    </>,
+    container
   );
 }
