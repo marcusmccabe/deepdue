@@ -117,7 +117,7 @@ export default function SearchBar({ initialQuery = "" }: Props) {
   const showDropdown = open && (results.length > 0 || noResults);
 
   return (
-    <div ref={containerRef} style={{ position: "relative", width: "284px" }}>
+    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
       {/* ── Input ── */}
       <div
         style={{
@@ -128,7 +128,7 @@ export default function SearchBar({ initialQuery = "" }: Props) {
           backgroundColor: "#ffffff",
           border: `1px solid ${open ? "#a5b4fc" : "#e2e8f0"}`,
           borderRadius: "8px",
-          width: "284px",
+          width: "100%",
           boxShadow: open
             ? "0 0 0 3px rgba(99,102,241,0.12)"
             : "0 1px 3px rgba(0,0,0,0.04)",

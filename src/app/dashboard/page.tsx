@@ -205,7 +205,7 @@ export default async function DashboardPage({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
-            marginBottom: "28px",
+            marginBottom: "20px",
           }}
         >
           <div>
@@ -226,7 +226,16 @@ export default async function DashboardPage({
               4 companies updated since your last visit
             </p>
           </div>
+        </div>
 
+        {/* Search bar – centred in the main content area */}
+        <div
+          style={{
+            maxWidth: "600px",
+            margin: "0 auto",
+            marginBottom: "28px",
+          }}
+        >
           <SearchBar initialQuery={q ?? ""} />
         </div>
 
