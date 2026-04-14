@@ -22,7 +22,6 @@ import dynamic from "next/dynamic";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
 
 const AccountsChat = dynamic(() => import("@/components/AccountsChat"), {
-  ssr: false,
   loading: () => (
     <div style={{ backgroundColor: "#fef9c3", border: "1px solid #fde047", padding: "12px 16px", borderRadius: "8px", fontSize: "12px", color: "#854d0e" }}>
       Loading chat panel…
