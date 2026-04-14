@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 type Message = {
   role: "user" | "assistant";
@@ -14,6 +15,7 @@ export default function AccountsChat({
   companyNumber: string;
   companyName: string;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -25,9 +27,13 @@ export default function AccountsChat({
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  if (!mounted) return null;
 
   async function send() {
     const text = input.trim();
@@ -62,7 +68,7 @@ export default function AccountsChat({
     }
   }
 
-  return (
+  return createPortal(
     <div
       style={{
         position: "fixed",
@@ -327,6 +333,7 @@ export default function AccountsChat({
           </svg>
         )}
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }

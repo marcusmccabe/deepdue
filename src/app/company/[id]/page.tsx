@@ -19,7 +19,7 @@ import {
   type CHAppointment,
 } from "@/lib/companies-house";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
-import ChatInitializer from "@/components/ChatInitializer";
+import AccountsChat from "@/components/AccountsChat";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1079,7 +1079,7 @@ export default async function CompanyPage({
           </div>
         </div>
 
-        <ChatInitializer
+        <AccountsChat
           companyNumber={companyNumber}
           companyName={company.company_name}
         />
