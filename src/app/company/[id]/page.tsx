@@ -1076,13 +1076,14 @@ export default async function CompanyPage({
               <HealthRing />
             </div>
 
-            {/* Chat panel */}
-            <AccountsChat
-              companyNumber={companyNumber}
-              companyName={company.company_name}
-            />
           </div>
         </div>
+
+        {/* Floating chat panel */}
+        <AccountsChat
+          companyNumber={companyNumber}
+          companyName={company.company_name}
+        />
       </main>
     </div>
   );
