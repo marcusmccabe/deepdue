@@ -19,7 +19,7 @@ import {
   type CHAppointment,
 } from "@/lib/companies-house";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
-import AccountsChat from "@/components/AccountsChat";
+import ChatInitializer from "@/components/ChatInitializer";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1079,8 +1079,7 @@ export default async function CompanyPage({
           </div>
         </div>
 
-        {/* Floating chat panel */}
-        <AccountsChat
+        <ChatInitializer
           companyNumber={companyNumber}
           companyName={company.company_name}
         />

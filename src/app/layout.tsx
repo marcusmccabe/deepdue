@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import FloatingChatProvider from "@/components/FloatingChatProvider";
 
 export const metadata: Metadata = {
   title: "DeepDue — UK Company Intelligence",
@@ -26,7 +27,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <FloatingChatProvider>{children}</FloatingChatProvider>
+      </body>
     </html>
   );
 }
