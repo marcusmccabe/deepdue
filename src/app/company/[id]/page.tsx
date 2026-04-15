@@ -338,7 +338,7 @@ export default async function CompanyPage({
 
       {/* ── CompanyPageClient (new tabbed layout) ── */}
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 32px 0" }}>
-        <CompanyPageClient company={company} analysis={null} />
+        <CompanyPageClient company={company} />
       </div>
 
       {/* ── Main layout ── */}

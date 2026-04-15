@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
+import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -149,12 +150,28 @@ function SkeletonBlock({ height = 20, width = "100%" }: { height?: number; width
 
 export default function CompanyPageClient({
   company,
-  analysis,
 }: {
   company: any;
-  analysis: any;
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [analysis, setAnalysis] = useState<AccountsAnalysis | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(
+      `/api/analyse-accounts?companyNumber=${encodeURIComponent(
+        company.company_number
+      )}`
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled) setAnalysis(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [company.company_number]);
 
   const snap = analysis?.financialSnapshot;
 
