@@ -246,33 +246,26 @@ export default function DashboardPage() {
         }}
       >
         {/* 1. Top greeting row */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "24px",
-          }}
-        >
-          <div>
-            <h1
-              style={{
-                fontFamily:
-                  'var(--font-instrument-serif), "Instrument Serif", serif',
-                fontSize: "26px",
-                fontWeight: "400",
-                color: "#0f172a",
-                lineHeight: "1.2",
-                marginBottom: "4px",
-              }}
-            >
-              Good morning, Marcus
-            </h1>
-            <p style={{ fontSize: "13px", color: "#94a3b8" }}>
-              4 companies updated since your last visit
-            </p>
+        <div style={{ marginBottom: "24px" }}>
+          <h1
+            style={{
+              fontFamily:
+                'var(--font-instrument-serif), "Instrument Serif", serif',
+              fontSize: "26px",
+              fontWeight: "400",
+              color: "#0f172a",
+              lineHeight: "1.2",
+              marginBottom: "4px",
+            }}
+          >
+            Good morning, Marcus
+          </h1>
+          <p style={{ fontSize: "13px", color: "#94a3b8" }}>
+            4 companies updated since your last visit
+          </p>
+          <div style={{ maxWidth: "500px", margin: "12px auto 0" }}>
+            <SearchToggleBar />
           </div>
-          <SearchToggleBar />
         </div>
 
         {/* 2. Stats row */}
