@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
+import AIAnalysisCard from "@/components/AIAnalysisCard";
 import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -486,59 +487,8 @@ export default function CompanyPageClient({
                 )}
               </div>
 
-              {/* Items for attention card */}
-              <div style={CARD}>
-                <div style={CARD_HEADER}>
-                  <span style={CARD_TITLE}>Items for Attention</span>
-                </div>
-                <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {analysis === null ? (
-                    <>
-                      <SkeletonBlock height={56} />
-                      <SkeletonBlock height={56} />
-                    </>
-                  ) : (analysis?.risksAndWarnings?.explicitRisks ?? []).length === 0 ? (
-                    <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", padding: "16px 0" }}>
-                      No items flagged for attention.
-                    </div>
-                  ) : (
-                    <>
-                      {(analysis.risksAndWarnings.explicitRisks as string[]).map(
-                        (risk, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              borderLeft: "4px solid #d97706",
-                              backgroundColor: "rgba(217,119,6,0.05)",
-                              borderRadius: "0 8px 8px 0",
-                              padding: "12px 14px",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: "13px",
-                                color: "#78350f",
-                                lineHeight: "1.55",
-                              }}
-                            >
-                              {risk}
-                            </div>
-                          </div>
-                        )
-                      )}
-                      <div
-                        style={{
-                          fontSize: "12px",
-                          color: "#94a3b8",
-                          marginTop: "4px",
-                        }}
-                      >
-                        Have a question? Click Ask AI to chat about these accounts.
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+              {/* AI analysis — Risks & Warnings now lives inside this card */}
+              <AIAnalysisCard companyNumber={company.company_number} />
             </>
           )}
 
