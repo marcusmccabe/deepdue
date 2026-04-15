@@ -1,4 +1,4 @@
-import SearchBar from "@/components/SearchBar";
+import SearchToggleBar from "@/components/SearchToggleBar";
 
 const NAV_ITEMS = [
   { icon: "🔍", label: "Search", active: false },
@@ -10,72 +10,140 @@ const NAV_ITEMS = [
 ];
 
 const STAT_CARDS = [
-  { label: "MONITORED", value: "24", desc: "companies" },
-  { label: "ALERTS", value: "3", desc: "this week" },
-  { label: "AVG SCORE", value: "72", desc: "portfolio" },
-  { label: "REPORTS", value: "8", desc: "this month" },
+  { label: "Monitored", value: "24", desc: "companies" },
+  { label: "Alerts this week", value: "3", desc: "" },
+  { label: "Searches this month", value: "47", desc: "" },
+  { label: "Reports generated", value: "8", desc: "" },
 ];
 
-const AI_INSIGHTS = [
+const RECENT_SEARCHES = [
+  { name: "Tesco PLC", number: "00445790", sector: "Retail", status: "active" },
   {
-    borderColor: "#d97706",
-    bg: "rgba(217,119,6,0.06)",
-    title: "⚠️ Going Concern Note",
-    body: "Auditors flagged material uncertainty in 2024 cash flow projections. Recommend monitoring working capital.",
+    name: "Barratt Developments PLC",
+    number: "00604574",
+    sector: "Construction",
+    status: "active",
   },
   {
-    borderColor: "#d97706",
-    bg: "rgba(217,119,6,0.06)",
-    title: "🔒 Cyber Incident Disclosed",
-    body: "Ransomware attack Q2 2023. £180k remediation cost noted in accounts. No customer data breach reported.",
+    name: "Carillion PLC",
+    number: "03675085",
+    sector: "Construction",
+    status: "dissolved",
   },
   {
-    borderColor: "#059669",
-    bg: "rgba(5,150,105,0.06)",
-    title: "📈 Revenue Growth +51%",
-    body: "Turnover rose from £12.4m to £18.7m over 3 years. Gross margins stable at 28-31%.",
+    name: "Octopus Energy Ltd",
+    number: "09263424",
+    sector: "Energy",
+    status: "active",
   },
   {
-    borderColor: "#e2e8f0",
-    bg: "#f1f5f9",
-    title: "👤 Director Instability",
-    body: "3 CFO changes in 18 months. Current appointment October 2023. Recommend monitoring continuity.",
+    name: "Deliveroo PLC",
+    number: "08167130",
+    sector: "Food & Delivery",
+    status: "active",
+  },
+  {
+    name: "BHS Group Ltd",
+    number: "00308764",
+    sector: "Retail",
+    status: "dissolved",
   },
 ];
-
-const CHART_BARS = [
-  { year: "2021", value: 9.8 },
-  { year: "2022", value: 12.4 },
-  { year: "2023", value: 15.9 },
-  { year: "2024", value: 18.7 },
-];
-const MAX_VALUE = 20;
 
 const WATCHLIST = [
-  { name: "Tesco PLC", sector: "Retail", score: 88, change: "+2" },
-  { name: "Taylor Wimpey", sector: "Construction", score: 76, change: "—" },
-  { name: "Octopus Energy", sector: "Energy", score: 71, change: "-3" },
-  { name: "Deliveroo PLC", sector: "Tech", score: 58, change: "-5" },
+  {
+    name: "Tesco PLC",
+    status: "active",
+    accountsText: "Accounts filed 3 months ago",
+    monthsOld: 3,
+  },
+  {
+    name: "Barratt Developments PLC",
+    status: "active",
+    accountsText: "Accounts filed 8 months ago",
+    monthsOld: 8,
+  },
+  {
+    name: "Taylor Wimpey PLC",
+    status: "active",
+    accountsText: "Accounts filed 14 months ago",
+    monthsOld: 14,
+  },
+  {
+    name: "Octopus Energy Ltd",
+    status: "active",
+    accountsText: "Accounts filed 6 months ago",
+    monthsOld: 6,
+  },
+  {
+    name: "Carillion PLC",
+    status: "dissolved",
+    accountsText: "Accounts filed 15 months ago",
+    monthsOld: 15,
+  },
 ];
 
-function scoreColor(score: number): string {
-  if (score >= 80) return "#059669";
-  if (score >= 65) return "#4f46e5";
-  return "#d97706";
+const ALERTS = [
+  {
+    type: "New filing",
+    company: "Tesco PLC",
+    desc: "Annual accounts filed for year ended Jan 2025",
+    time: "2 hours ago",
+  },
+  {
+    type: "Director",
+    company: "Taylor Wimpey PLC",
+    desc: "New director appointed: Jane Smith",
+    time: "1 day ago",
+  },
+  {
+    type: "Status",
+    company: "Carillion PLC",
+    desc: "Company status changed to dissolved",
+    time: "3 days ago",
+  },
+  {
+    type: "New filing",
+    company: "Octopus Energy Ltd",
+    desc: "Confirmation statement filed",
+    time: "5 days ago",
+  },
+];
+
+function alertBadge(type: string): { bg: string; color: string } {
+  if (type === "New filing") return { bg: "rgba(79,70,229,0.10)", color: "#4f46e5" };
+  if (type === "Director") return { bg: "rgba(234,179,8,0.12)", color: "#a16207" };
+  if (type === "Status") return { bg: "rgba(220,38,38,0.10)", color: "#dc2626" };
+  return { bg: "#f1f5f9", color: "#475569" };
 }
 
-function changeColor(change: string): string {
-  if (change.startsWith("+")) return "#059669";
-  if (change.startsWith("-")) return "#dc2626";
-  return "#94a3b8";
-}
-
-export default async function DashboardPage({
-  searchParams,
+function StatusBadge({
+  status,
+  small,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  status: string;
+  small?: boolean;
 }) {
-  const { q } = await searchParams;
+  const active = status === "active";
+  return (
+    <span
+      style={{
+        fontSize: small ? "10px" : "11px",
+        fontWeight: "600",
+        padding: small ? "2px 6px" : "3px 8px",
+        borderRadius: "100px",
+        backgroundColor: active ? "rgba(5,150,105,0.10)" : "rgba(220,38,38,0.10)",
+        color: active ? "#059669" : "#dc2626",
+        flexShrink: 0,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {active ? "Active" : "Dissolved"}
+    </span>
+  );
+}
+
+export default function DashboardPage() {
   return (
     <div
       style={{
@@ -102,12 +170,7 @@ export default async function DashboardPage({
         }}
       >
         {/* Logo */}
-        <div
-          style={{
-            padding: "20px",
-            borderBottom: "1px solid #e2e8f0",
-          }}
-        >
+        <div style={{ padding: "20px", borderBottom: "1px solid #e2e8f0" }}>
           <div
             style={{
               fontFamily:
@@ -162,35 +225,18 @@ export default async function DashboardPage({
           ))}
         </nav>
 
-        {/* User info */}
-        <div
-          style={{
-            padding: "16px 20px",
-            borderTop: "1px solid #e2e8f0",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "12px",
-              fontWeight: "700",
-              color: "#0f172a",
-            }}
-          >
+        {/* User row */}
+        <div style={{ padding: "16px 20px", borderTop: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a" }}>
             Marcus McCabe
           </div>
-          <div
-            style={{
-              fontSize: "11px",
-              color: "#94a3b8",
-              marginTop: "2px",
-            }}
-          >
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
             Pro plan
           </div>
         </div>
       </aside>
 
-      {/* ── Main Content ── */}
+      {/* ── Main content ── */}
       <main
         style={{
           marginLeft: "220px",
@@ -199,13 +245,13 @@ export default async function DashboardPage({
           minHeight: "100vh",
         }}
       >
-        {/* Top row */}
+        {/* 1. Top greeting row */}
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
-            marginBottom: "20px",
+            marginBottom: "24px",
           }}
         >
           <div>
@@ -226,20 +272,10 @@ export default async function DashboardPage({
               4 companies updated since your last visit
             </p>
           </div>
+          <SearchToggleBar />
         </div>
 
-        {/* Search bar – centred in the main content area */}
-        <div
-          style={{
-            maxWidth: "600px",
-            margin: "0 auto",
-            marginBottom: "28px",
-          }}
-        >
-          <SearchBar initialQuery={q ?? ""} />
-        </div>
-
-        {/* ── Stat Cards ── */}
+        {/* 2. Stats row */}
         <div
           style={{
             display: "grid",
@@ -278,31 +314,32 @@ export default async function DashboardPage({
                   fontWeight: "800",
                   color: "#0f172a",
                   lineHeight: "1",
-                  marginBottom: "4px",
+                  marginBottom: card.desc ? "4px" : "0",
                 }}
               >
                 {card.value}
               </div>
-              <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-                {card.desc}
-              </div>
+              {card.desc && (
+                <div style={{ fontSize: "12px", color: "#94a3b8" }}>
+                  {card.desc}
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        {/* ── Main grid: 1fr + 320px ── */}
+        {/* 3. Two-column grid */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 320px",
+            gridTemplateColumns: "1fr 300px",
             gap: "20px",
             alignItems: "start",
           }}
         >
-          {/* LEFT COLUMN */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-
-            {/* Card: AI Document Intelligence */}
+          {/* ── Main column ── */}
+          <div>
+            {/* Recent searches card */}
             <div
               style={{
                 backgroundColor: "#ffffff",
@@ -313,123 +350,10 @@ export default async function DashboardPage({
                 overflow: "hidden",
               }}
             >
-              {/* Card header */}
               <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
                   padding: "16px 18px",
                   borderBottom: "1px solid #e2e8f0",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "22px",
-                      height: "22px",
-                      backgroundColor: "#4f46e5",
-                      borderRadius: "5px",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div>
-                    <div
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: "700",
-                        color: "#0f172a",
-                      }}
-                    >
-                      AI Document Intelligence
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#94a3b8",
-                        marginTop: "1px",
-                      }}
-                    >
-                      Extracted from 2021–2024 filed accounts
-                    </div>
-                  </div>
-                </div>
-                <span
-                  style={{
-                    padding: "4px 10px",
-                    backgroundColor: "rgba(79,70,229,0.08)",
-                    color: "#4f46e5",
-                    borderRadius: "100px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  4 insights
-                </span>
-              </div>
-
-              {/* Insight rows */}
-              <div style={{ padding: "14px 18px" }}>
-                {AI_INSIGHTS.map((insight, i) => (
-                  <div
-                    key={insight.title}
-                    style={{
-                      borderLeft: `3px solid ${insight.borderColor}`,
-                      backgroundColor: insight.bg,
-                      borderRadius: "0 8px 8px 0",
-                      padding: "14px 18px",
-                      marginBottom: i < AI_INSIGHTS.length - 1 ? "8px" : "0",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: "700",
-                        color: "#0f172a",
-                        marginBottom: "5px",
-                      }}
-                    >
-                      {insight.title}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        color: "#475569",
-                        lineHeight: "1.55",
-                      }}
-                    >
-                      {insight.body}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Card: Financial History */}
-            <div
-              style={{
-                backgroundColor: "#ffffff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "10px",
-                boxShadow:
-                  "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
-                padding: "18px",
-              }}
-            >
-              {/* Header */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "20px",
                 }}
               >
                 <div
@@ -439,138 +363,103 @@ export default async function DashboardPage({
                     color: "#0f172a",
                   }}
                 >
-                  Financial History
-                </div>
-                <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-                  All figures in £m
+                  Recent searches
                 </div>
               </div>
 
-              {/* Bar chart */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  height: "80px",
-                  gap: "6px",
-                  marginBottom: "10px",
-                }}
-              >
-                {CHART_BARS.map((bar, i) => {
-                  const isLast = i === CHART_BARS.length - 1;
-                  const height = Math.round((bar.value / MAX_VALUE) * 80);
-                  return (
-                    <div
-                      key={bar.year}
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    {["Company", "Number", "Sector", "Status", ""].map(
+                      (col) => (
+                        <th
+                          key={col}
+                          style={{
+                            padding: "10px 18px",
+                            textAlign: "left",
+                            fontSize: "11px",
+                            fontWeight: "600",
+                            color: "#94a3b8",
+                            letterSpacing: "0.06em",
+                            textTransform: "uppercase",
+                            borderBottom: "1px solid #e2e8f0",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {col}
+                        </th>
+                      )
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {RECENT_SEARCHES.map((company, i) => (
+                    <tr
+                      key={company.number}
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        flex: 1,
+                        borderBottom:
+                          i < RECENT_SEARCHES.length - 1
+                            ? "1px solid #f1f5f9"
+                            : "none",
                       }}
                     >
-                      <div
+                      <td
                         style={{
-                          width: "100%",
-                          height: `${height}px`,
-                          backgroundColor: isLast
-                            ? "#4f46e5"
-                            : "rgba(79,70,229,0.08)",
-                          border: isLast
-                            ? "none"
-                            : "1px solid rgba(79,70,229,0.25)",
-                          borderRadius: "4px 4px 0 0",
-                        }}
-                      />
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#94a3b8",
-                          marginTop: "5px",
+                          padding: "13px 18px",
+                          fontSize: "13px",
+                          fontWeight: "500",
+                          color: "#0f172a",
                         }}
                       >
-                        {bar.year}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Summary row */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: "28px",
-                  paddingTop: "14px",
-                  borderTop: "1px solid #e2e8f0",
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "#94a3b8",
-                      marginBottom: "3px",
-                    }}
-                  >
-                    Revenue 2024
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      color: "#0f172a",
-                    }}
-                  >
-                    £18.7m
-                  </div>
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "#94a3b8",
-                      marginBottom: "3px",
-                    }}
-                  >
-                    Net Profit
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      color: "#059669",
-                    }}
-                  >
-                    £1.6m
-                  </div>
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "#94a3b8",
-                      marginBottom: "3px",
-                    }}
-                  >
-                    Growth YoY
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      color: "#4f46e5",
-                    }}
-                  >
-                    +18%
-                  </div>
-                </div>
-              </div>
+                        {company.name}
+                      </td>
+                      <td
+                        style={{
+                          padding: "13px 18px",
+                          fontSize: "12px",
+                          color: "#475569",
+                          fontFamily: "'Courier New', monospace",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {company.number}
+                      </td>
+                      <td
+                        style={{
+                          padding: "13px 18px",
+                          fontSize: "12px",
+                          color: "#475569",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {company.sector}
+                      </td>
+                      <td style={{ padding: "13px 18px" }}>
+                        <StatusBadge status={company.status} />
+                      </td>
+                      <td style={{ padding: "13px 18px" }}>
+                        <a
+                          href={`/company/${company.number}`}
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            color: "#4f46e5",
+                            textDecoration: "none",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          View →
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* RIGHT COLUMN */}
-          <div>
+          {/* ── Right column ── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {/* Watchlist card */}
             <div
               style={{
@@ -579,92 +468,213 @@ export default async function DashboardPage({
                 borderRadius: "10px",
                 boxShadow:
                   "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
-                padding: "18px",
+                overflow: "hidden",
               }}
             >
               <div
                 style={{
-                  fontSize: "13px",
-                  fontWeight: "700",
-                  color: "#0f172a",
-                  marginBottom: "16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  borderBottom: "1px solid #e2e8f0",
                 }}
               >
-                Watchlist
-              </div>
-
-              {WATCHLIST.map((company, i) => (
                 <div
-                  key={company.name}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingTop: i === 0 ? "0" : "14px",
-                    paddingBottom: i === WATCHLIST.length - 1 ? "0" : "14px",
-                    borderBottom:
-                      i === WATCHLIST.length - 1
-                        ? "none"
-                        : "1px solid #e2e8f0",
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "#0f172a",
                   }}
                 >
-                  <div>
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        fontWeight: "500",
-                        color: "#0f172a",
-                      }}
-                    >
-                      {company.name}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#94a3b8",
-                        marginTop: "2px",
-                      }}
-                    >
-                      {company.sector}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div
-                      style={{
-                        fontSize: "15px",
-                        fontWeight: "700",
-                        color: scoreColor(company.score),
-                      }}
-                    >
-                      {company.score}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: changeColor(company.change),
-                        marginTop: "2px",
-                      }}
-                    >
-                      {company.change}
-                    </div>
-                  </div>
+                  Watchlist
                 </div>
-              ))}
+                <a
+                  href="#"
+                  style={{
+                    fontSize: "12px",
+                    color: "#4f46e5",
+                    fontWeight: "500",
+                    textDecoration: "none",
+                  }}
+                >
+                  View all
+                </a>
+              </div>
+
+              <div>
+                {WATCHLIST.map((company, i) => (
+                  <div
+                    key={company.name}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      padding: "11px 16px",
+                      borderBottom:
+                        i < WATCHLIST.length - 1
+                          ? "1px solid #f1f5f9"
+                          : "none",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, marginRight: "8px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          marginBottom: "4px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "13px",
+                            fontWeight: "500",
+                            color: "#0f172a",
+                          }}
+                        >
+                          {company.name}
+                        </span>
+                        <StatusBadge status={company.status} small />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color:
+                            company.monthsOld > 12 ? "#d97706" : "#94a3b8",
+                        }}
+                      >
+                        {company.accountsText}
+                      </div>
+                    </div>
+                    <button
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#cbd5e1",
+                        fontSize: "18px",
+                        lineHeight: "1",
+                        padding: "0",
+                        flexShrink: 0,
+                        marginTop: "1px",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent alerts card */}
+            <div
+              style={{
+                backgroundColor: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                boxShadow:
+                  "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "14px 16px",
+                  borderBottom: "1px solid #e2e8f0",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: "700",
+                    color: "#0f172a",
+                  }}
+                >
+                  Recent alerts
+                </div>
+                <a
+                  href="#"
+                  style={{
+                    fontSize: "12px",
+                    color: "#4f46e5",
+                    fontWeight: "500",
+                    textDecoration: "none",
+                  }}
+                >
+                  View all
+                </a>
+              </div>
+
+              <div>
+                {ALERTS.map((alert, i) => {
+                  const badge = alertBadge(alert.type);
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        padding: "11px 16px",
+                        borderBottom:
+                          i < ALERTS.length - 1 ? "1px solid #f1f5f9" : "none",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "600",
+                            padding: "2px 7px",
+                            borderRadius: "100px",
+                            backgroundColor: badge.bg,
+                            color: badge.color,
+                            whiteSpace: "nowrap",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {alert.type}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            color: "#0f172a",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {alert.company}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#475569",
+                          marginBottom: "3px",
+                        }}
+                      >
+                        {alert.desc}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                        {alert.time}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            textAlign: "center",
-            marginTop: "32px",
-            fontSize: "11px",
-            color: "#94a3b8",
-          }}
-        >
-          Data sourced from Companies House &amp; public filings · AI analysis
-          not a regulated credit opinion · Last updated 14 April 2026
         </div>
       </main>
     </div>
