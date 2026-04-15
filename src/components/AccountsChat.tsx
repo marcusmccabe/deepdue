@@ -53,6 +53,14 @@ export default function AccountsChat({
     });
   }, [messages, loading]);
 
+  useEffect(() => {
+    function handleOpenChat() {
+      setIsOpen(true);
+    }
+    window.addEventListener("deepdue:open-chat", handleOpenChat);
+    return () => window.removeEventListener("deepdue:open-chat", handleOpenChat);
+  }, []);
+
   // Nothing until the container is mounted into the real DOM
   if (!container) return null;
 
