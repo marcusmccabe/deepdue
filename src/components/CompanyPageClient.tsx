@@ -443,6 +443,124 @@ export default function CompanyPageClient({
                   )}
                 </div>
               </div>
+
+              {/* Directors & Officers */}
+              <div style={CARD}>
+                <div style={CARD_HEADER}>
+                  <span style={CARD_TITLE}>Directors &amp; Officers</span>
+                  <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                    {officers.length} current
+                  </span>
+                </div>
+                {officers.length === 0 ? (
+                  <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                    No current officers found
+                  </div>
+                ) : (
+                  <div>
+                    {officers.map((officer: any, i: number) => (
+                      <div
+                        key={`${officer.name}-${i}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          padding: "13px 18px",
+                          borderBottom: i < officers.length - 1 ? "1px solid #f1f5f9" : "none",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "3px" }}>
+                            {officer.name}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#475569", textTransform: "capitalize" }}>
+                            {(officer.officer_role ?? "officer").replace(/-/g, " ")}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: "11px", color: "#94a3b8" }}>Appointed</div>
+                          <div style={{ fontSize: "12px", fontWeight: "500", color: "#475569", marginTop: "1px" }}>
+                            {fmtDate(officer.appointed_on)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Filing History */}
+              <div style={CARD}>
+                <div style={CARD_HEADER}>
+                  <span style={CARD_TITLE}>Filing History</span>
+                  <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                    Last {filings.length}
+                  </span>
+                </div>
+                {filings.length === 0 ? (
+                  <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                    No filings found
+                  </div>
+                ) : (
+                  <div>
+                    {filings.map((filing: any, i: number) => {
+                      const docUrl =
+                        filing.links?.document_metadata && filing.transaction_id
+                          ? `https://find-and-update.company-information.service.gov.uk/company/${company.company_number}/filing-history/${filing.transaction_id}/document?format=pdf&download=0`
+                          : null;
+                      return (
+                        <div
+                          key={filing.transaction_id ?? `${filing.date}-${i}`}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            padding: "12px 18px",
+                            borderBottom: i < filings.length - 1 ? "1px solid #f1f5f9" : "none",
+                            gap: "12px",
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: "500", color: "#0f172a", marginBottom: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {fmtFilingDesc(filing.description, filing.description_values)}
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                              <span style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Courier New', monospace" }}>
+                                {filing.type ?? "—"}
+                              </span>
+                              <span style={{ fontSize: "11px", color: "#cbd5e1" }}>·</span>
+                              <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                                {fmtDate(filing.date)}
+                              </span>
+                            </div>
+                          </div>
+                          {docUrl && (
+                            <a
+                              href={docUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: "500",
+                                color: "#4f46e5",
+                                flexShrink: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "3px",
+                              }}
+                            >
+                              View
+                              <svg width="9" height="9" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                                <path d="M3 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V8.5a.5.5 0 0 0-1 0V12H3V3h3.5a.5.5 0 0 0 0-1H3Zm6.854.146a.5.5 0 0 0-.707.708L11.293 5H8.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v2.793L9.854 2.146Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </>
           )}
 
