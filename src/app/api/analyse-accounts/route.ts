@@ -11,7 +11,17 @@ const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const SYSTEM_PROMPT =
-  "You are a forensic accountant producing a neutral factual briefing from UK company accounts. Your role is to extract and summarise what the accounts say — you do not give credit opinions, risk ratings, or recommendations. Never use evaluative language such as 'creditworthy', 'high risk', 'concerning', 'worrying', 'recommended', or any equivalent. State facts only.\n\nExtract the following in JSON format only, no other text, no markdown, no code blocks:\n{\nfinancialSnapshot: {\nrevenue: number | null,\ngrossProfit: number | null,\noperatingProfit: number | null,\nnetProfit: number | null,\ncash: number | null,\nnetAssets: number | null,\ntotalDebt: number | null,\nemployeeCount: number | null\n},\nkeyMovements: string[] (max 8 items — plain factual statements about year-on-year changes with numbers, e.g. 'Revenue increased 9% from £373m to £408m.' or 'Operating cash flow fell 61% from £3.1m to £1.3m.' or 'Net assets increased 36% to £3.0m.' or 'Debtor balances increased by £3.4m.' No opinion words.),\nitemsForAttention: [ { heading: string, detail: string } ] (max 5 items — factual observations a professional would want to note: going concern notes, qualified audit opinions, director loans, large related party balances, significant debtor increases, overdue filings, charges registered, legal proceedings mentioned in notes. Only include genuine disclosures or anomalies. Do not include items simply because a metric moved. If there are no genuine items return an empty array.),\nkeyEvents: string[] (max 6 items — plain factual statements about specific events during the year: director appointments and resignations, dividends paid, acquisitions, disposals, significant contracts mentioned, restructuring. Each is one sentence.),\nmanagementCommentary: string (2-3 sentences neutrally summarising what the directors said about the year and outlook. Do not endorse or contradict their statements. Just report what they said. Prefix with 'Directors reported...' or 'According to the strategic report...'),\nauditOpinion: {\nopinion: 'clean' | 'qualified' | 'adverse' | 'disclaimer' | 'unknown',\nauditorName: string | null,\nauditorChanged: boolean | null,\nemphasisOfMatter: string | null\n},\ngoingConcern: {\nflagged: boolean,\ndetail: string | null\n},\ndirectorLoans: {\npresent: boolean,\ndetail: string | null\n},\nrelatedPartyTransactions: {\npresent: boolean,\ndetail: string | null\n},\nstrategicIntelligence: {\nplannedProducts: string[] (array of strings — new products, services, or business lines directors state they intend to launch or develop; empty array if none mentioned),\nplannedMarkets: string[] (array of strings — new geographies, sectors, or customer segments the company states it intends to enter or expand into; empty array if none mentioned),\ngroupEntitiesMentioned: [ { name: string, relationship: string } ] (array — every company, entity or organisation mentioned anywhere in the document other than the company itself, including subsidiaries, sister companies, parent companies, joint ventures, foundations, associated entities, and named third parties in related party notes — do not miss any entity mentioned in any section of the document. Example: { name: 'Specialist Indemnity Services Limited', relationship: 'Sister company — planned vehicle for insurance backing of indemnity services' }),\nstrategicInitiatives: string[] (array of strings — specific strategic projects, investments, restructuring plans, technology initiatives, or operational changes disclosed in narrative sections; empty array if none),\ncompetitivePositioning: string | null (statements the directors make about their market position, competitive advantages, or how they differentiate from competitors — quote or closely paraphrase their own words; null if nothing relevant),\nregulatoryOrLegalDevelopments: string[] (array of strings — mentions of regulatory changes the company is responding to, legal proceedings, compliance initiatives, or government policy changes affecting the business; empty array if none)\n}\n}";
+  "You are a CFO-level analyst reviewing UK Companies House filed accounts. Produce a neutral factual briefing — not a credit opinion. Never use words like creditworthy, high risk, or recommended. Return a single JSON object with exactly these keys:\n" +
+  "financialHealth — object with: revenue, grossProfit, operatingProfit, netProfit (each with value as string e.g. '£4.2m' and yoyChange as string e.g. '+12%' or 'n/a'), cashPosition (string), netAssets (string)\n" +
+  "margins — object with: grossMargin (string e.g. '34%'), operatingMargin (string), trend (one sentence on whether margins are expanding or compressing and any stated reason)\n" +
+  "balanceSheet — object with: currentRatio (string or 'n/a'), gearing (string or 'n/a'), assetWriteDowns (string or 'None noted')\n" +
+  "cashFlowSignals — object with: profitToCashConversion (one sentence), capex (string or 'Not disclosed'), summary (one sentence)\n" +
+  "directorFlags — object with: directorLoans (string describing amount and direction or 'None'), relatedPartyTransactions (string or 'None disclosed'), remunerationNotes (string or 'Not disclosed')\n" +
+  "strategicDirection — object with: managementOutlook (string), marketsOrGeographies (string or 'Not mentioned'), acquisitionsOrRestructuring (string or 'None mentioned'), rdOrInvestment (string or 'Not mentioned')\n" +
+  "risksAndWarnings — object with: explicitRisks (array of strings, empty array if none), materialUncertainties (string or 'None stated'), goingConcern (string — must state whether confirmed clean or qualified and exact wording if qualified)\n" +
+  "auditOpinion — object with: opinion (one of: 'Clean', 'Qualified', 'Adverse', 'Disclaimer of opinion'), qualifications (string or 'None'), auditorName (string), auditorChanged (boolean)\n" +
+  "complianceSignals — object with: lateFilingHistory (string or 'None noted'), dormancyOrStrikeOff (string or 'None noted'), chargesRegistered (string or 'None registered')\n" +
+  "Return only the JSON object. No preamble, no markdown, no explanation.";
 
 function chAuth(): string {
   const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
@@ -260,71 +270,70 @@ export async function GET(request: NextRequest) {
 
     const parsed = JSON.parse(jsonText);
 
+    const lineItem = (x: { value?: string; yoyChange?: string } | undefined) => ({
+      value: x?.value ?? "n/a",
+      yoyChange: x?.yoyChange ?? "n/a",
+    });
+
     analysis = {
-      financialSnapshot: parsed.financialSnapshot
-        ? {
-            revenue: parsed.financialSnapshot.revenue ?? null,
-            grossProfit: parsed.financialSnapshot.grossProfit ?? null,
-            operatingProfit: parsed.financialSnapshot.operatingProfit ?? null,
-            netProfit: parsed.financialSnapshot.netProfit ?? null,
-            cash: parsed.financialSnapshot.cash ?? null,
-            netAssets: parsed.financialSnapshot.netAssets ?? null,
-            totalDebt: parsed.financialSnapshot.totalDebt ?? null,
-            employeeCount: parsed.financialSnapshot.employeeCount ?? null,
-          }
-        : undefined,
-      keyMovements: parsed.keyMovements ?? [],
-      itemsForAttention: (parsed.itemsForAttention ?? []).map(
-        (item: { heading?: string; detail?: string }) => ({
-          heading: item.heading ?? "",
-          detail: item.detail ?? "",
-        })
-      ),
-      keyEvents: parsed.keyEvents ?? [],
-      managementCommentary: parsed.managementCommentary ?? undefined,
-      auditOpinion: parsed.auditOpinion
-        ? {
-            opinion: parsed.auditOpinion.opinion ?? "unknown",
-            auditorName: parsed.auditOpinion.auditorName ?? null,
-            auditorChanged: parsed.auditOpinion.auditorChanged ?? null,
-            emphasisOfMatter: parsed.auditOpinion.emphasisOfMatter ?? null,
-          }
-        : undefined,
-      goingConcern: parsed.goingConcern
-        ? {
-            flagged: parsed.goingConcern.flagged ?? false,
-            detail: parsed.goingConcern.detail ?? null,
-          }
-        : undefined,
-      directorLoans: parsed.directorLoans
-        ? {
-            present: parsed.directorLoans.present ?? false,
-            detail: parsed.directorLoans.detail ?? null,
-          }
-        : undefined,
-      relatedPartyTransactions: parsed.relatedPartyTransactions
-        ? {
-            present: parsed.relatedPartyTransactions.present ?? false,
-            detail: parsed.relatedPartyTransactions.detail ?? null,
-          }
-        : undefined,
-      strategicIntelligence: parsed.strategicIntelligence
-        ? {
-            plannedProducts: parsed.strategicIntelligence.plannedProducts ?? [],
-            plannedMarkets: parsed.strategicIntelligence.plannedMarkets ?? [],
-            groupEntitiesMentioned: (
-              parsed.strategicIntelligence.groupEntitiesMentioned ?? []
-            ).map((e: { name?: string; relationship?: string }) => ({
-              name: e.name ?? "",
-              relationship: e.relationship ?? "",
-            })),
-            strategicInitiatives: parsed.strategicIntelligence.strategicInitiatives ?? [],
-            competitivePositioning:
-              parsed.strategicIntelligence.competitivePositioning ?? null,
-            regulatoryOrLegalDevelopments:
-              parsed.strategicIntelligence.regulatoryOrLegalDevelopments ?? [],
-          }
-        : undefined,
+      financialHealth: {
+        revenue: lineItem(parsed.financialHealth?.revenue),
+        grossProfit: lineItem(parsed.financialHealth?.grossProfit),
+        operatingProfit: lineItem(parsed.financialHealth?.operatingProfit),
+        netProfit: lineItem(parsed.financialHealth?.netProfit),
+        cashPosition: parsed.financialHealth?.cashPosition ?? "n/a",
+        netAssets: parsed.financialHealth?.netAssets ?? "n/a",
+      },
+      margins: {
+        grossMargin: parsed.margins?.grossMargin ?? "n/a",
+        operatingMargin: parsed.margins?.operatingMargin ?? "n/a",
+        trend: parsed.margins?.trend ?? "",
+      },
+      balanceSheet: {
+        currentRatio: parsed.balanceSheet?.currentRatio ?? "n/a",
+        gearing: parsed.balanceSheet?.gearing ?? "n/a",
+        assetWriteDowns: parsed.balanceSheet?.assetWriteDowns ?? "None noted",
+      },
+      cashFlowSignals: {
+        profitToCashConversion: parsed.cashFlowSignals?.profitToCashConversion ?? "",
+        capex: parsed.cashFlowSignals?.capex ?? "Not disclosed",
+        summary: parsed.cashFlowSignals?.summary ?? "",
+      },
+      directorFlags: {
+        directorLoans: parsed.directorFlags?.directorLoans ?? "None",
+        relatedPartyTransactions:
+          parsed.directorFlags?.relatedPartyTransactions ?? "None disclosed",
+        remunerationNotes: parsed.directorFlags?.remunerationNotes ?? "Not disclosed",
+      },
+      strategicDirection: {
+        managementOutlook: parsed.strategicDirection?.managementOutlook ?? "",
+        marketsOrGeographies:
+          parsed.strategicDirection?.marketsOrGeographies ?? "Not mentioned",
+        acquisitionsOrRestructuring:
+          parsed.strategicDirection?.acquisitionsOrRestructuring ?? "None mentioned",
+        rdOrInvestment: parsed.strategicDirection?.rdOrInvestment ?? "Not mentioned",
+      },
+      risksAndWarnings: {
+        explicitRisks: Array.isArray(parsed.risksAndWarnings?.explicitRisks)
+          ? parsed.risksAndWarnings.explicitRisks
+          : [],
+        materialUncertainties:
+          parsed.risksAndWarnings?.materialUncertainties ?? "None stated",
+        goingConcern: parsed.risksAndWarnings?.goingConcern ?? "",
+      },
+      auditOpinion: {
+        opinion: parsed.auditOpinion?.opinion ?? "Clean",
+        qualifications: parsed.auditOpinion?.qualifications ?? "None",
+        auditorName: parsed.auditOpinion?.auditorName ?? "",
+        auditorChanged: Boolean(parsed.auditOpinion?.auditorChanged),
+      },
+      complianceSignals: {
+        lateFilingHistory: parsed.complianceSignals?.lateFilingHistory ?? "None noted",
+        dormancyOrStrikeOff:
+          parsed.complianceSignals?.dormancyOrStrikeOff ?? "None noted",
+        chargesRegistered:
+          parsed.complianceSignals?.chargesRegistered ?? "None registered",
+      },
       analysedAt: new Date().toISOString(),
       companyNumber,
       documentDate: filing.date,

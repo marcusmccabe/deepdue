@@ -2,57 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { AccountsAnalysis } from "@/lib/analysis-types";
-
-// ── Formatting helpers ────────────────────────────────────────────────────────
-
-function fmtCurrency(value: number | null | undefined, currency = "GBP"): string {
-  if (value === null || value === undefined) return "—";
-  const abs = Math.abs(value);
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : "€";
-  let formatted: string;
-  if (abs >= 1_000_000_000) {
-    formatted = (value / 1_000_000_000).toFixed(2) + "bn";
-  } else if (abs >= 1_000_000) {
-    formatted = (value / 1_000_000).toFixed(2) + "m";
-  } else if (abs >= 1_000) {
-    formatted = (value / 1_000).toFixed(1) + "k";
-  } else {
-    formatted = value.toLocaleString("en-GB");
-  }
-  return `${symbol}${formatted}`;
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function AuditBadge({ opinion }: { opinion: string }) {
-  const cfg: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-    clean: { label: "Clean Opinion", color: "#059669", bg: "rgba(5,150,105,0.09)", icon: "✓" },
-    qualified: { label: "Qualified Opinion", color: "#d97706", bg: "rgba(217,119,6,0.09)", icon: "⚠" },
-    adverse: { label: "Adverse Opinion", color: "#dc2626", bg: "rgba(220,38,38,0.09)", icon: "✗" },
-    disclaimer: { label: "Disclaimer of Opinion", color: "#dc2626", bg: "rgba(220,38,38,0.09)", icon: "✗" },
-    unknown: { label: "Opinion Unknown", color: "#94a3b8", bg: "rgba(148,163,184,0.09)", icon: "?" },
-  };
-  const c = cfg[opinion] ?? cfg.unknown;
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "5px",
-        fontSize: "12px",
-        fontWeight: "600",
-        color: c.color,
-        backgroundColor: c.bg,
-        padding: "4px 11px",
-        borderRadius: "100px",
-        border: `1px solid ${c.color}44`,
-      }}
-    >
-      {c.icon} {c.label}
-    </span>
-  );
-}
+import type {
+  AccountsAnalysis,
+  FinancialLineItem,
+} from "@/lib/analysis-types";
 
 // ── Shared card chrome ────────────────────────────────────────────────────────
 
@@ -63,6 +16,32 @@ const CARD: React.CSSProperties = {
   boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
   overflow: "hidden",
 };
+
+const SECTION_CARD: React.CSSProperties = {
+  backgroundColor: "#ffffff",
+  border: "1px solid #e2e8f0",
+  borderRadius: "10px",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+  overflow: "hidden",
+};
+
+function Pill({ label, color, bg }: { label: string; color: string; bg: string }) {
+  return (
+    <span
+      style={{
+        padding: "4px 10px",
+        backgroundColor: bg,
+        color,
+        borderRadius: "100px",
+        fontSize: "12px",
+        fontWeight: "600",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
 
 function CardHeader({ badge }: { badge: React.ReactNode }) {
   return (
@@ -99,38 +78,164 @@ function CardHeader({ badge }: { badge: React.ReactNode }) {
   );
 }
 
-function Pill({ label, color, bg }: { label: string; color: string; bg: string }) {
-  return (
-    <span
-      style={{
-        padding: "4px 10px",
-        backgroundColor: bg,
-        color,
-        borderRadius: "100px",
-        fontSize: "12px",
-        fontWeight: "600",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {label}
-    </span>
-  );
-}
+// ── Section primitives ────────────────────────────────────────────────────────
 
-function Label({ children }: { children: React.ReactNode }) {
+function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        fontSize: "10px",
-        fontWeight: "600",
-        color: "#94a3b8",
-        letterSpacing: "0.07em",
-        textTransform: "uppercase",
-        marginBottom: "8px",
+        fontSize: "13px",
+        fontWeight: "700",
+        color: "#0f172a",
+        padding: "12px 16px",
+        borderBottom: "1px solid #e2e8f0",
+        backgroundColor: "#f8fafc",
+        letterSpacing: "0.01em",
       }}
     >
       {children}
     </div>
+  );
+}
+
+const MUTED_MARKERS = ["None", "Not disclosed", "Not mentioned"];
+
+function isMuted(value: string): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  return MUTED_MARKERS.some(
+    (m) => trimmed === m || trimmed.toLowerCase().startsWith(m.toLowerCase())
+  );
+}
+
+function LabelledRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  const muted = typeof value === "string" && isMuted(value);
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "160px 1fr",
+        gap: "12px",
+        padding: "10px 16px",
+        borderBottom: "1px solid #f1f5f9",
+        alignItems: "start",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "11px",
+          fontWeight: "600",
+          color: "#64748b",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          paddingTop: "1px",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: "13px",
+          color: muted ? "#94a3b8" : "#0f172a",
+          lineHeight: "1.55",
+          fontStyle: muted ? "italic" : "normal",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  heading,
+  children,
+}: {
+  heading: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={SECTION_CARD}>
+      <SectionHeading>{heading}</SectionHeading>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// ── Financial line item (value + yoy) ────────────────────────────────────────
+
+function FinancialLineItemValue({ item }: { item: FinancialLineItem }) {
+  const muted = isMuted(item.value);
+  const yoy = item.yoyChange ?? "n/a";
+  const yoyMuted = !yoy || yoy === "n/a";
+  let yoyColor = "#64748b";
+  if (!yoyMuted) {
+    if (yoy.startsWith("+")) yoyColor = "#059669";
+    else if (yoy.startsWith("-")) yoyColor = "#dc2626";
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+      <span
+        style={{
+          fontSize: "14px",
+          fontWeight: "700",
+          color: muted ? "#94a3b8" : "#0f172a",
+          fontStyle: muted ? "italic" : "normal",
+        }}
+      >
+        {item.value}
+      </span>
+      <span
+        style={{
+          fontSize: "12px",
+          fontWeight: "600",
+          color: yoyMuted ? "#94a3b8" : yoyColor,
+          fontStyle: yoyMuted ? "italic" : "normal",
+        }}
+      >
+        {yoy}
+      </span>
+    </div>
+  );
+}
+
+// ── Audit opinion badge ───────────────────────────────────────────────────────
+
+function AuditOpinionBadge({ opinion }: { opinion: string }) {
+  let color = "#94a3b8";
+  let bg = "rgba(148,163,184,0.12)";
+  if (opinion === "Clean") {
+    color = "#059669";
+    bg = "rgba(5,150,105,0.10)";
+  } else if (opinion === "Qualified") {
+    color = "#d97706";
+    bg = "rgba(217,119,6,0.10)";
+  } else if (opinion === "Adverse" || opinion === "Disclaimer of opinion") {
+    color = "#dc2626";
+    bg = "rgba(220,38,38,0.10)";
+  }
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        fontSize: "12px",
+        fontWeight: "700",
+        color,
+        backgroundColor: bg,
+        padding: "4px 11px",
+        borderRadius: "100px",
+        border: `1px solid ${color}44`,
+      }}
+    >
+      {opinion}
+    </span>
   );
 }
 
@@ -274,569 +379,185 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
   // ── Success ───────────────────────────────────────────────────────────────
   if (!analysis) return null;
 
-  const snap = analysis.financialSnapshot;
-  const audit = analysis.auditOpinion;
-  const gc = analysis.goingConcern;
-  const dl = analysis.directorLoans;
-  const rpt = analysis.relatedPartyTransactions;
-  const si = analysis.strategicIntelligence;
-  const hasSI =
-    si &&
-    ((si.groupEntitiesMentioned ?? []).length > 0 ||
-      (si.plannedProducts ?? []).length > 0 ||
-      (si.plannedMarkets ?? []).length > 0 ||
-      (si.strategicInitiatives ?? []).length > 0 ||
-      si.competitivePositioning != null ||
-      (si.regulatoryOrLegalDevelopments ?? []).length > 0);
-
-  const snapFields: { label: string; value: number | null | undefined }[] = snap
-    ? [
-        { label: "Revenue", value: snap.revenue },
-        { label: "Gross Profit", value: snap.grossProfit },
-        { label: "Operating Profit", value: snap.operatingProfit },
-        { label: "Net Profit", value: snap.netProfit },
-        { label: "Cash", value: snap.cash },
-        { label: "Net Assets", value: snap.netAssets },
-        { label: "Total Debt", value: snap.totalDebt },
-        { label: "Employees", value: snap.employeeCount },
-      ]
-    : [];
-  const visibleSnap = snapFields.filter((f) => f.value !== null && f.value !== undefined);
+  const fh = analysis.financialHealth;
+  const mg = analysis.margins;
+  const bs = analysis.balanceSheet;
+  const cf = analysis.cashFlowSignals;
+  const df = analysis.directorFlags;
+  const sd = analysis.strategicDirection;
+  const rw = analysis.risksAndWarnings;
+  const ao = analysis.auditOpinion;
+  const cs = analysis.complianceSignals;
 
   return (
     <div style={CARD}>
       <CardHeader badge={<Pill label="✓ Analysis complete" color="#059669" bg="rgba(5,150,105,0.08)" />} />
 
-      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "20px" }}>
+      <div
+        style={{
+          padding: "16px 18px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px",
+          backgroundColor: "#f8fafc",
+        }}
+      >
+        {/* ── 1. Financial Health ── */}
+        <SectionCard heading="Financial Health">
+          <LabelledRow label="Revenue" value={<FinancialLineItemValue item={fh.revenue} />} />
+          <LabelledRow
+            label="Gross Profit"
+            value={<FinancialLineItemValue item={fh.grossProfit} />}
+          />
+          <LabelledRow
+            label="Operating Profit"
+            value={<FinancialLineItemValue item={fh.operatingProfit} />}
+          />
+          <LabelledRow
+            label="Net Profit"
+            value={<FinancialLineItemValue item={fh.netProfit} />}
+          />
+          <LabelledRow label="Cash Position" value={fh.cashPosition} />
+          <LabelledRow label="Net Assets" value={fh.netAssets} />
+        </SectionCard>
 
-        {/* ── Financial Snapshot ── */}
-        {visibleSnap.length > 0 && (
-          <div>
-            <Label>Financial Snapshot</Label>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "8px",
-              }}
-            >
-              {visibleSnap.map(({ label, value }) => (
-                <div
-                  key={label}
+        {/* ── 2. Margins & Profitability ── */}
+        <SectionCard heading="Margins & Profitability">
+          <LabelledRow label="Gross Margin" value={mg.grossMargin} />
+          <LabelledRow label="Operating Margin" value={mg.operatingMargin} />
+          <LabelledRow label="Trend" value={mg.trend} />
+        </SectionCard>
+
+        {/* ── 3. Balance Sheet ── */}
+        <SectionCard heading="Balance Sheet">
+          <LabelledRow label="Current Ratio" value={bs.currentRatio} />
+          <LabelledRow label="Gearing" value={bs.gearing} />
+          <LabelledRow label="Asset Write-downs" value={bs.assetWriteDowns} />
+        </SectionCard>
+
+        {/* ── 4. Cash Flow ── */}
+        <SectionCard heading="Cash Flow">
+          <LabelledRow
+            label="Profit to Cash Conversion"
+            value={cf.profitToCashConversion}
+          />
+          <LabelledRow label="Capex" value={cf.capex} />
+          <LabelledRow label="Summary" value={cf.summary} />
+        </SectionCard>
+
+        {/* ── 5. Director & Related Party Flags ── */}
+        <SectionCard heading="Director & Related Party Flags">
+          <LabelledRow label="Director Loans" value={df.directorLoans} />
+          <LabelledRow
+            label="Related Party Transactions"
+            value={df.relatedPartyTransactions}
+          />
+          <LabelledRow label="Remuneration Notes" value={df.remunerationNotes} />
+        </SectionCard>
+
+        {/* ── 6. Strategic Direction ── */}
+        <SectionCard heading="Strategic Direction">
+          <LabelledRow label="Management Outlook" value={sd.managementOutlook} />
+          <LabelledRow
+            label="Markets or Geographies"
+            value={sd.marketsOrGeographies}
+          />
+          <LabelledRow
+            label="Acquisitions or Restructuring"
+            value={sd.acquisitionsOrRestructuring}
+          />
+          <LabelledRow label="R&D or Investment" value={sd.rdOrInvestment} />
+        </SectionCard>
+
+        {/* ── 7. Risks & Warnings ── */}
+        <SectionCard heading="Risks & Warnings">
+          <LabelledRow
+            label="Explicit Risks"
+            value={
+              rw.explicitRisks.length === 0 ? (
+                <span style={{ color: "#94a3b8", fontStyle: "italic" }}>None stated</span>
+              ) : (
+                <ul
                   style={{
-                    backgroundColor: "#f8fafc",
-                    borderRadius: "8px",
-                    padding: "10px 12px",
-                    border: "1px solid #e2e8f0",
+                    margin: 0,
+                    paddingLeft: "18px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: "10px",
-                      fontWeight: "600",
-                      color: "#94a3b8",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.06em",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    {label}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "15px",
-                      fontWeight: "800",
-                      color:
-                        label === "Employees"
-                          ? "#0f172a"
-                          : (value ?? 0) < 0
-                          ? "#dc2626"
-                          : "#0f172a",
-                      lineHeight: "1.2",
-                    }}
-                  >
-                    {label === "Employees"
-                      ? (value ?? 0).toLocaleString("en-GB")
-                      : fmtCurrency(value)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Key Movements ── */}
-        {(analysis.keyMovements ?? []).length > 0 && (
-          <div>
-            <Label>Key Movements</Label>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "5px",
-              }}
-            >
-              {(analysis.keyMovements ?? []).map((movement, i) => (
-                <li key={i} style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}>
-                  {movement}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* ── Items for Attention ── */}
-        {(analysis.itemsForAttention ?? []).length > 0 && (
-          <div>
-            <Label>Items for Attention</Label>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {(analysis.itemsForAttention ?? []).map((item, i) => (
-                <div
-                  key={i}
-                  style={{
-                    backgroundColor: "rgba(217,119,6,0.06)",
-                    border: "1px solid rgba(217,119,6,0.25)",
-                    borderRadius: "8px",
-                    padding: "12px 14px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: "700",
-                      color: "#92400e",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    {item.heading}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
-                    {item.detail}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Key Events ── */}
-        {(analysis.keyEvents ?? []).length > 0 && (
-          <div>
-            <Label>Key Events</Label>
-            <ul
-              style={{
-                margin: 0,
-                paddingLeft: "16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "5px",
-              }}
-            >
-              {(analysis.keyEvents ?? []).map((event, i) => (
-                <li key={i} style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}>
-                  {event}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* ── Management Commentary ── */}
-        {analysis.managementCommentary && (
-          <div>
-            <Label>Management Commentary</Label>
-            <div
-              style={{
-                borderLeft: "3px solid #4f46e5",
-                backgroundColor: "rgba(79,70,229,0.04)",
-                borderRadius: "0 8px 8px 0",
-                padding: "12px 14px",
-                fontSize: "13px",
-                color: "#334155",
-                lineHeight: "1.65",
-                fontStyle: "italic",
-              }}
-            >
-              {analysis.managementCommentary}
-            </div>
-          </div>
-        )}
-
-        {/* ── Strategic Intelligence ── */}
-        {hasSI && si && (
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginBottom: "12px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "600",
-                  color: "#94a3b8",
-                  letterSpacing: "0.07em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Strategic Intelligence
-              </div>
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontWeight: "600",
-                  color: "#4f46e5",
-                  backgroundColor: "rgba(79,70,229,0.08)",
-                  padding: "2px 8px",
-                  borderRadius: "100px",
-                }}
-              >
-                Competitive insight
-              </span>
-            </div>
-
-            {/* 3a. Group & Related Entities */}
-            {(si.groupEntitiesMentioned ?? []).length > 0 && (
-              <div style={{ marginBottom: "14px" }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#64748b",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Group &amp; Related Entities
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  {(si.groupEntitiesMentioned ?? []).map((entity: { name: string; relationship: string }, i: number) => (
-                    <div
+                  {rw.explicitRisks.map((risk, i) => (
+                    <li
                       key={i}
                       style={{
-                        display: "flex",
-                        gap: "10px",
-                        padding: "8px 10px",
-                        backgroundColor: "#f8fafc",
-                        borderRadius: "6px",
-                        border: "1px solid #e2e8f0",
+                        fontSize: "13px",
+                        color: "#0f172a",
+                        lineHeight: "1.55",
                       }}
                     >
-                      <div
-                        style={{
-                          fontWeight: "700",
-                          color: "#0f172a",
-                          fontSize: "12px",
-                          flexShrink: 0,
-                          minWidth: "130px",
-                          maxWidth: "160px",
-                        }}
-                      >
-                        {entity.name}
-                      </div>
-                      <div
-                        style={{ fontSize: "12px", color: "#475569", lineHeight: "1.5" }}
-                      >
-                        {entity.relationship}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 3b. Planned Products & Services */}
-            {(si.plannedProducts ?? []).length > 0 && (
-              <div style={{ marginBottom: "14px" }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#64748b",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Planned Products &amp; Services
-                </div>
-                <div
-                  style={{
-                    borderLeft: "3px solid #4f46e5",
-                    paddingLeft: "12px",
-                  }}
-                >
-                  <ul
-                    style={{
-                      margin: 0,
-                      paddingLeft: "14px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "4px",
-                    }}
-                  >
-                    {(si.plannedProducts ?? []).map((product: string, i: number) => (
-                      <li
-                        key={i}
-                        style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
-                      >
-                        {product}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {/* 3c. Market Expansion */}
-            {(si.plannedMarkets ?? []).length > 0 && (
-              <div style={{ marginBottom: "14px" }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#64748b",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Market Expansion
-                </div>
-                <ul
-                  style={{
-                    margin: 0,
-                    paddingLeft: "16px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  {(si.plannedMarkets ?? []).map((market: string, i: number) => (
-                    <li
-                      key={i}
-                      style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
-                    >
-                      {market}
+                      {risk}
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
+              )
+            }
+          />
+          <LabelledRow
+            label="Material Uncertainties"
+            value={rw.materialUncertainties}
+          />
+          <LabelledRow label="Going Concern" value={rw.goingConcern} />
+        </SectionCard>
 
-            {/* 3d. Strategic Initiatives */}
-            {(si.strategicInitiatives ?? []).length > 0 && (
-              <div style={{ marginBottom: "14px" }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#64748b",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Strategic Initiatives
-                </div>
-                <ul
-                  style={{
-                    margin: 0,
-                    paddingLeft: "16px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  {(si.strategicInitiatives ?? []).map((initiative: string, i: number) => (
-                    <li
-                      key={i}
-                      style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
-                    >
-                      {initiative}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        {/* ── 8. Audit Opinion ── */}
+        <SectionCard heading="Audit Opinion">
+          <LabelledRow
+            label="Opinion"
+            value={<AuditOpinionBadge opinion={ao.opinion} />}
+          />
+          <LabelledRow label="Qualifications" value={ao.qualifications} />
+          <LabelledRow
+            label="Auditor Name"
+            value={
+              ao.auditorName && ao.auditorName.trim().length > 0 ? (
+                ao.auditorName
+              ) : (
+                <span style={{ color: "#94a3b8", fontStyle: "italic" }}>Not disclosed</span>
+              )
+            }
+          />
+          <LabelledRow
+            label="Auditor Changed"
+            value={
+              ao.auditorChanged ? (
+                <span style={{ fontWeight: "700", color: "#d97706" }}>Yes</span>
+              ) : (
+                "No"
+              )
+            }
+          />
+        </SectionCard>
 
-            {/* 3e. Competitive Positioning */}
-            {si.competitivePositioning && (
-              <div style={{ marginBottom: "14px" }}>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#64748b",
-                    marginBottom: "6px",
-                  }}
-                >
-                  How They Describe Themselves
-                </div>
-                <div
-                  style={{
-                    borderLeft: "3px solid #4f46e5",
-                    backgroundColor: "rgba(79,70,229,0.04)",
-                    borderRadius: "0 8px 8px 0",
-                    padding: "12px 14px",
-                    fontSize: "13px",
-                    color: "#334155",
-                    lineHeight: "1.65",
-                    fontStyle: "italic",
-                  }}
-                >
-                  {si.competitivePositioning}
-                </div>
-              </div>
-            )}
-
-            {/* 3f. Regulatory & Legal */}
-            {(si.regulatoryOrLegalDevelopments ?? []).length > 0 && (
-              <div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: "600",
-                    color: "#64748b",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Regulatory &amp; Legal
-                </div>
-                <ul
-                  style={{
-                    margin: 0,
-                    paddingLeft: "16px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  {(si.regulatoryOrLegalDevelopments ?? []).map((item: string, i: number) => (
-                    <li
-                      key={i}
-                      style={{ fontSize: "13px", color: "#475569", lineHeight: "1.55" }}
-                    >
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Audit Opinion ── */}
-        {audit && (
-          <div>
-            <Label>Audit Opinion</Label>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                <AuditBadge opinion={audit.opinion} />
-                {audit.auditorChanged === true && (
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      fontWeight: "700",
-                      color: "#dc2626",
-                      backgroundColor: "rgba(220,38,38,0.08)",
-                      padding: "3px 8px",
-                      borderRadius: "100px",
-                      border: "1px solid rgba(220,38,38,0.25)",
-                    }}
-                  >
-                    ⚠ Auditor changed this year
-                  </span>
-                )}
-              </div>
-              {audit.auditorName && (
-                <div style={{ fontSize: "12px", color: "#64748b" }}>
-                  Audited by{" "}
-                  <span style={{ fontWeight: "600", color: "#0f172a" }}>{audit.auditorName}</span>
-                </div>
-              )}
-              {audit.emphasisOfMatter && (
-                <div
-                  style={{
-                    backgroundColor: "rgba(217,119,6,0.07)",
-                    border: "1px solid rgba(217,119,6,0.25)",
-                    borderRadius: "6px",
-                    padding: "10px 12px",
-                    marginTop: "2px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "10px",
-                      fontWeight: "700",
-                      color: "#d97706",
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    Emphasis of Matter
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
-                    {audit.emphasisOfMatter}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Going Concern ── */}
-        {gc?.flagged && (
-          <div
-            style={{
-              backgroundColor: "rgba(217,119,6,0.07)",
-              border: "1px solid rgba(217,119,6,0.30)",
-              borderRadius: "8px",
-              padding: "12px 14px",
-            }}
-          >
-            <div style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
-              <span style={{ fontSize: "16px", flexShrink: 0 }}>⚠️</span>
-              <div>
-                <div
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: "700",
-                    color: "#92400e",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Going Concern Note
-                </div>
-                <div style={{ fontSize: "12px", color: "#78350f", lineHeight: "1.55" }}>
-                  {gc.detail ||
-                    "The accounts include a going concern note or material uncertainty disclosure."}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Director Loans ── */}
-        {dl?.present && dl.detail && (
-          <div>
-            <Label>Director Loans</Label>
-            <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{dl.detail}</div>
-          </div>
-        )}
-
-        {/* ── Related Party Transactions ── */}
-        {rpt?.present && rpt.detail && (
-          <div>
-            <Label>Related Party Transactions</Label>
-            <div style={{ fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>{rpt.detail}</div>
-          </div>
-        )}
+        {/* ── 9. Compliance Signals ── */}
+        <SectionCard heading="Compliance Signals">
+          <LabelledRow
+            label="Late Filing History"
+            value={cs.lateFilingHistory}
+          />
+          <LabelledRow
+            label="Dormancy or Strike-off"
+            value={cs.dormancyOrStrikeOff}
+          />
+          <LabelledRow
+            label="Charges Registered"
+            value={cs.chargesRegistered}
+          />
+        </SectionCard>
 
         {/* ── Footer ── */}
         <div
           style={{
-            borderTop: "1px solid #f1f5f9",
-            paddingTop: "14px",
+            paddingTop: "4px",
             display: "flex",
             flexDirection: "column",
             gap: "12px",

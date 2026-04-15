@@ -4,69 +4,80 @@
  * client components.
  */
 
-export interface FinancialSnapshot {
-  revenue: number | null;
-  grossProfit: number | null;
-  operatingProfit: number | null;
-  netProfit: number | null;
-  cash: number | null;
-  netAssets: number | null;
-  totalDebt: number | null;
-  employeeCount: number | null;
+export interface FinancialLineItem {
+  value: string;
+  yoyChange: string;
 }
 
-export interface AttentionItem {
-  heading: string;
-  detail: string;
+export interface FinancialHealth {
+  revenue: FinancialLineItem;
+  grossProfit: FinancialLineItem;
+  operatingProfit: FinancialLineItem;
+  netProfit: FinancialLineItem;
+  cashPosition: string;
+  netAssets: string;
+}
+
+export interface Margins {
+  grossMargin: string;
+  operatingMargin: string;
+  trend: string;
+}
+
+export interface BalanceSheet {
+  currentRatio: string;
+  gearing: string;
+  assetWriteDowns: string;
+}
+
+export interface CashFlowSignals {
+  profitToCashConversion: string;
+  capex: string;
+  summary: string;
+}
+
+export interface DirectorFlags {
+  directorLoans: string;
+  relatedPartyTransactions: string;
+  remunerationNotes: string;
+}
+
+export interface StrategicDirection {
+  managementOutlook: string;
+  marketsOrGeographies: string;
+  acquisitionsOrRestructuring: string;
+  rdOrInvestment: string;
+}
+
+export interface RisksAndWarnings {
+  explicitRisks: string[];
+  materialUncertainties: string;
+  goingConcern: string;
 }
 
 export interface AuditOpinion {
-  opinion: "clean" | "qualified" | "adverse" | "disclaimer" | "unknown";
-  auditorName: string | null;
-  auditorChanged: boolean | null;
-  emphasisOfMatter: string | null;
+  opinion: "Clean" | "Qualified" | "Adverse" | "Disclaimer of opinion";
+  qualifications: string;
+  auditorName: string;
+  auditorChanged: boolean;
 }
 
-export interface GoingConcern {
-  flagged: boolean;
-  detail: string | null;
-}
-
-export interface DirectorLoans {
-  present: boolean;
-  detail: string | null;
-}
-
-export interface RelatedPartyTransactions {
-  present: boolean;
-  detail: string | null;
-}
-
-export interface GroupEntity {
-  name: string;
-  relationship: string;
-}
-
-export interface StrategicIntelligence {
-  plannedProducts?: string[];
-  plannedMarkets?: string[];
-  groupEntitiesMentioned?: GroupEntity[];
-  strategicInitiatives?: string[];
-  competitivePositioning?: string | null;
-  regulatoryOrLegalDevelopments?: string[];
+export interface ComplianceSignals {
+  lateFilingHistory: string;
+  dormancyOrStrikeOff: string;
+  chargesRegistered: string;
 }
 
 export interface AccountsAnalysis {
-  financialSnapshot?: FinancialSnapshot;
-  keyMovements?: string[];
-  itemsForAttention?: AttentionItem[];
-  keyEvents?: string[];
-  managementCommentary?: string;
-  auditOpinion?: AuditOpinion;
-  goingConcern?: GoingConcern;
-  directorLoans?: DirectorLoans;
-  relatedPartyTransactions?: RelatedPartyTransactions;
-  strategicIntelligence?: StrategicIntelligence;
+  financialHealth: FinancialHealth;
+  margins: Margins;
+  balanceSheet: BalanceSheet;
+  cashFlowSignals: CashFlowSignals;
+  directorFlags: DirectorFlags;
+  strategicDirection: StrategicDirection;
+  risksAndWarnings: RisksAndWarnings;
+  auditOpinion: AuditOpinion;
+  complianceSignals: ComplianceSignals;
   // Metadata added by our route — not part of Claude's response
   analysedAt: string;
   companyNumber: string;
