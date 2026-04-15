@@ -3,30 +3,23 @@
 import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { AccountsAnalysis, FinancialSnapshot } from "@/lib/analysis-types";
+import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmt(value: number | null | undefined, currency = "GBP"): string {
-  if (value === null || value === undefined) return "—";
-  const abs = Math.abs(value);
-  const symbol = currency === "GBP" ? "£" : currency === "USD" ? "$" : "€";
-  let formatted: string;
-  if (abs >= 1_000_000_000) {
-    formatted = (value / 1_000_000_000).toFixed(2) + "bn";
-  } else if (abs >= 1_000_000) {
-    formatted = (value / 1_000_000).toFixed(2) + "m";
-  } else if (abs >= 1_000) {
-    formatted = (value / 1_000).toFixed(1) + "k";
-  } else {
-    formatted = value.toLocaleString("en-GB");
-  }
-  return `${symbol}${formatted}`;
+function displayString(value: string | undefined | null): string {
+  if (value == null) return "—";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === "n/a") return "—";
+  return trimmed;
 }
 
-function pct(numerator: number | null | undefined, denominator: number | null | undefined): string {
-  if (numerator == null || denominator == null || denominator === 0) return "—";
-  return ((numerator / denominator) * 100).toFixed(1) + "%";
+function yoyHighlight(yoy: string | undefined): "positive" | "negative" | "neutral" {
+  if (!yoy) return "neutral";
+  const t = yoy.trim();
+  if (t.startsWith("+")) return "positive";
+  if (t.startsWith("-") || t.startsWith("−")) return "negative";
+  return "neutral";
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -121,57 +114,34 @@ function MetricRow({
   );
 }
 
-function BarChart({ revenue, currency }: { revenue: number | null; currency: string }) {
-  if (!revenue) {
+function RevenueCallout({ revenue, yoy }: { revenue: string; yoy: string }) {
+  const highlight = yoyHighlight(yoy);
+  const yoyColor =
+    highlight === "positive" ? "#059669" : highlight === "negative" ? "#dc2626" : "#64748b";
+  const display = displayString(revenue);
+  if (display === "—") {
     return (
       <div
         style={{ padding: "32px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}
       >
-        Revenue data not available for chart
+        Revenue data not available
       </div>
     );
   }
-
   return (
     <div
       style={{
-        padding: "20px 18px 16px",
+        padding: "24px 18px 20px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "8px",
+        gap: "6px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-end", gap: "20px", height: "140px" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-          <span style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>
-            {fmt(revenue, currency)}
-          </span>
-          <div
-            style={{
-              width: "64px",
-              height: "120px",
-              backgroundColor: "#4f46e5",
-              borderRadius: "4px 4px 0 0",
-              opacity: 0.85,
-            }}
-          />
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: "16px", marginTop: "4px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-          <div
-            style={{
-              width: "10px",
-              height: "10px",
-              borderRadius: "2px",
-              backgroundColor: "#4f46e5",
-              opacity: 0.85,
-            }}
-          />
-          <span style={{ fontSize: "11px", color: "#475569" }}>Current year</span>
-        </div>
-      </div>
+      <span style={{ fontSize: "28px", fontWeight: "800", color: "#0f172a" }}>{display}</span>
+      <span style={{ fontSize: "12px", fontWeight: "600", color: yoyColor }}>
+        {displayString(yoy)} year-on-year
+      </span>
       <p style={{ fontSize: "11px", color: "#cbd5e1", margin: "4px 0 0", textAlign: "center" }}>
         Multi-year trend available when multiple accounts are analysed
       </p>
@@ -258,8 +228,8 @@ export default function FinancialsPage() {
     };
   }, [companyNumber]);
 
-  const snap: FinancialSnapshot | undefined = analysis?.financialSnapshot;
-  const currency = "GBP";
+  const fh = analysis?.financialHealth;
+  const margins = analysis?.margins;
 
   return (
     <div
@@ -392,101 +362,60 @@ export default function FinancialsPage() {
               <TableHeader />
               <MetricRow
                 label="Revenue (Turnover)"
-                value={fmt(snap?.revenue, currency)}
-                highlight={
-                  snap?.revenue != null && snap.revenue > 0 ? "positive" : "neutral"
-                }
+                value={displayString(fh?.revenue.value)}
+                highlight={yoyHighlight(fh?.revenue.yoyChange)}
               />
               <MetricRow
                 label="Gross Profit"
-                value={fmt(snap?.grossProfit, currency)}
-                highlight={
-                  snap?.grossProfit == null ? "neutral"
-                  : snap.grossProfit >= 0 ? "positive" : "negative"
-                }
+                value={displayString(fh?.grossProfit.value)}
+                highlight={yoyHighlight(fh?.grossProfit.yoyChange)}
               />
               <MetricRow
                 label="Operating Profit"
-                value={fmt(snap?.operatingProfit, currency)}
-                highlight={
-                  snap?.operatingProfit == null ? "neutral"
-                  : snap.operatingProfit >= 0 ? "positive" : "negative"
-                }
+                value={displayString(fh?.operatingProfit.value)}
+                highlight={yoyHighlight(fh?.operatingProfit.yoyChange)}
               />
               <MetricRow
                 label="Net Profit / (Loss)"
-                value={fmt(snap?.netProfit, currency)}
-                highlight={
-                  snap?.netProfit == null ? "neutral"
-                  : snap.netProfit >= 0 ? "positive" : "negative"
-                }
+                value={displayString(fh?.netProfit.value)}
+                highlight={yoyHighlight(fh?.netProfit.yoyChange)}
               />
               <MetricRow
                 label="Net Assets (Equity)"
-                value={fmt(snap?.netAssets, currency)}
-                highlight={
-                  snap?.netAssets == null ? "neutral"
-                  : snap.netAssets >= 0 ? "positive" : "negative"
-                }
+                value={displayString(fh?.netAssets)}
+                highlight="neutral"
               />
               <MetricRow
-                label="Cash &amp; Equivalents"
-                value={fmt(snap?.cash, currency)}
-                highlight={snap?.cash != null && snap.cash > 0 ? "positive" : "neutral"}
-              />
-              <MetricRow
-                label="Total Debt"
-                value={fmt(snap?.totalDebt, currency)}
-                highlight={snap?.totalDebt != null && snap.totalDebt > 0 ? "negative" : "neutral"}
-              />
-              <MetricRow
-                label="Employees"
-                value={
-                  snap?.employeeCount != null
-                    ? snap.employeeCount.toLocaleString("en-GB")
-                    : "—"
-                }
+                label="Cash Position"
+                value={displayString(fh?.cashPosition)}
                 isLast
+                highlight="neutral"
               />
             </div>
 
             {/* Calculated ratios */}
             <div style={CARD}>
-              <SectionHeader title="Calculated Ratios" />
+              <SectionHeader title="Margins" />
               <MetricRow
                 label="Gross Margin"
-                value={pct(snap?.grossProfit, snap?.revenue)}
-                highlight={
-                  snap?.grossProfit != null && snap?.revenue
-                    ? snap.grossProfit / snap.revenue >= 0 ? "positive" : "negative"
-                    : "neutral"
-                }
+                value={displayString(margins?.grossMargin)}
+                highlight="neutral"
               />
               <MetricRow
                 label="Operating Margin"
-                value={pct(snap?.operatingProfit, snap?.revenue)}
-                highlight={
-                  snap?.operatingProfit != null && snap?.revenue
-                    ? snap.operatingProfit / snap.revenue >= 0 ? "positive" : "negative"
-                    : "neutral"
-                }
-              />
-              <MetricRow
-                label="Net Margin"
-                value={pct(snap?.netProfit, snap?.revenue)}
+                value={displayString(margins?.operatingMargin)}
                 isLast
-                highlight={
-                  snap?.netProfit != null && snap?.revenue
-                    ? snap.netProfit / snap.revenue >= 0 ? "positive" : "negative"
-                    : "neutral"
-                }
+                highlight="neutral"
               />
             </div>
 
-            {/* Revenue chart */}
+            {/* Revenue callout */}
             <div style={CARD}>
               <SectionHeader title="Revenue" />
-              <BarChart revenue={snap?.revenue ?? null} currency={currency} />
+              <RevenueCallout
+                revenue={fh?.revenue.value ?? ""}
+                yoy={fh?.revenue.yoyChange ?? ""}
+              />
             </div>
 
             {/* Document metadata footer */}

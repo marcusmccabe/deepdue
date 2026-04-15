@@ -7,15 +7,6 @@ import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtCurrency(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
-  const abs = Math.abs(value);
-  if (abs >= 1_000_000_000) return `£${(value / 1_000_000_000).toFixed(2)}bn`;
-  if (abs >= 1_000_000) return `£${(value / 1_000_000).toFixed(2)}m`;
-  if (abs >= 1_000) return `£${(value / 1_000).toFixed(1)}k`;
-  return `£${value.toLocaleString("en-GB")}`;
-}
-
 function fmtDate(iso?: string): string {
   if (!iso) return "—";
   try {
@@ -194,15 +185,15 @@ export default function CompanyPageClient({
     };
   }, [company.company_number]);
 
-  const snap = analysis?.financialSnapshot;
+  const fh = analysis?.financialHealth;
 
-  const snapMetrics = [
-    { label: "Revenue", value: snap?.revenue },
-    { label: "Gross Profit", value: snap?.grossProfit },
-    { label: "Operating Profit", value: snap?.operatingProfit },
-    { label: "Cash", value: snap?.cash },
-    { label: "Net Assets", value: snap?.netAssets },
-    { label: "Employees", value: snap?.employeeCount, isCount: true },
+  const snapMetrics: { label: string; value: string | undefined }[] = [
+    { label: "Revenue", value: fh?.revenue.value },
+    { label: "Gross Profit", value: fh?.grossProfit.value },
+    { label: "Operating Profit", value: fh?.operatingProfit.value },
+    { label: "Net Profit", value: fh?.netProfit.value },
+    { label: "Cash Position", value: fh?.cashPosition },
+    { label: "Net Assets", value: fh?.netAssets },
   ];
 
   return (
@@ -343,38 +334,36 @@ export default function CompanyPageClient({
                         gap: "10px",
                       }}
                     >
-                      {snapMetrics.map((m) => (
-                        <div
-                          key={m.label}
-                          style={{
-                            backgroundColor: "#f8fafc",
-                            borderRadius: "8px",
-                            padding: "12px",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <div style={LABEL}>{m.label}</div>
+                      {snapMetrics.map((m) => {
+                        const missing =
+                          m.value == null ||
+                          m.value === "" ||
+                          m.value === "n/a" ||
+                          m.value === "N/A";
+                        return (
                           <div
+                            key={m.label}
                             style={{
-                              fontSize: "15px",
-                              fontWeight: "800",
-                              color:
-                                m.value == null
-                                  ? "#cbd5e1"
-                                  : !m.isCount && (m.value as number) < 0
-                                  ? "#dc2626"
-                                  : "#0f172a",
-                              lineHeight: "1.2",
+                              backgroundColor: "#f8fafc",
+                              borderRadius: "8px",
+                              padding: "12px",
+                              border: "1px solid #e2e8f0",
                             }}
                           >
-                            {m.value == null
-                              ? "—"
-                              : m.isCount
-                              ? (m.value as number).toLocaleString("en-GB")
-                              : fmtCurrency(m.value as number)}
+                            <div style={LABEL}>{m.label}</div>
+                            <div
+                              style={{
+                                fontSize: "15px",
+                                fontWeight: "800",
+                                color: missing ? "#cbd5e1" : "#0f172a",
+                                lineHeight: "1.2",
+                              }}
+                            >
+                              {missing ? "—" : m.value}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -508,14 +497,14 @@ export default function CompanyPageClient({
                       <SkeletonBlock height={56} />
                       <SkeletonBlock height={56} />
                     </>
-                  ) : (analysis?.itemsForAttention ?? []).length === 0 ? (
+                  ) : (analysis?.risksAndWarnings?.explicitRisks ?? []).length === 0 ? (
                     <div style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", padding: "16px 0" }}>
                       No items flagged for attention.
                     </div>
                   ) : (
                     <>
-                      {(analysis.itemsForAttention as { heading: string; detail: string }[]).map(
-                        (item, i) => (
+                      {(analysis.risksAndWarnings.explicitRisks as string[]).map(
+                        (risk, i) => (
                           <div
                             key={i}
                             style={{
@@ -528,21 +517,11 @@ export default function CompanyPageClient({
                             <div
                               style={{
                                 fontSize: "13px",
-                                fontWeight: "700",
-                                color: "#92400e",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              {item.heading}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "12px",
                                 color: "#78350f",
                                 lineHeight: "1.55",
                               }}
                             >
-                              {item.detail}
+                              {risk}
                             </div>
                           </div>
                         )
