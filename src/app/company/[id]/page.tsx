@@ -20,6 +20,7 @@ import {
 } from "@/lib/companies-house";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
 import AccountsChat from "@/components/AccountsChat";
+import CompanyPageClient from "@/components/CompanyPageClient";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -334,6 +335,11 @@ export default async function CompanyPage({
           <span style={{ color: "#94a3b8", fontSize: "13px" }}>.ai</span>
         </div>
       </nav>
+
+      {/* ── CompanyPageClient (new tabbed layout) ── */}
+      <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 32px 0" }}>
+        <CompanyPageClient company={company} analysis={null} />
+      </div>
 
       {/* ── Main layout ── */}
       <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "32px 32px 64px" }}>
