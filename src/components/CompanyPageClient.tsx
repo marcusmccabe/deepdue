@@ -46,6 +46,17 @@ function fmtAddress(addr?: Record<string, string | undefined>): string {
   );
 }
 
+function fmtFilingDesc(description?: string | null, values?: Record<string, string>): string {
+  if (!description) return "Filing document";
+  let text = description.replace(/-/g, " ");
+  if (values) {
+    for (const [k, v] of Object.entries(values)) {
+      text = text.replace(new RegExp(`\\{${k}\\}`, "g"), v);
+    }
+  }
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function fmtCompanyType(type?: string | null): string {
   if (!type) return "—";
   const map: Record<string, string> = {
@@ -150,8 +161,18 @@ function SkeletonBlock({ height = 20, width = "100%" }: { height?: number; width
 
 export default function CompanyPageClient({
   company,
+  officers = [],
+  filings = [],
+  charges = [],
+  pscs = [],
+  appointments = [],
 }: {
   company: any;
+  officers?: any[];
+  filings?: any[];
+  charges?: any[];
+  pscs?: any[];
+  appointments?: any[];
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [analysis, setAnalysis] = useState<AccountsAnalysis | null>(null);
@@ -425,9 +446,271 @@ export default function CompanyPageClient({
             </>
           )}
 
-          {/* All other tabs — coming soon */}
-          {activeTab !== "overview" && (
+          {/* Financials tab */}
+          {activeTab === "financials" && (
             <div style={{ padding: "24px", color: "grey" }}>Coming soon</div>
+          )}
+
+          {/* AI analysis tab */}
+          {activeTab === "ai-analysis" && (
+            <div style={{ padding: "24px", color: "grey" }}>Coming soon</div>
+          )}
+
+          {/* Directors tab */}
+          {activeTab === "directors" && (
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Directors &amp; Officers</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  {officers.length} current
+                </span>
+              </div>
+              {officers.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No current officers found
+                </div>
+              ) : (
+                <div>
+                  {officers.map((officer: any, i: number) => (
+                    <div
+                      key={`${officer.name}-${i}`}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        padding: "13px 18px",
+                        borderBottom: i < officers.length - 1 ? "1px solid #f1f5f9" : "none",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "3px" }}>
+                          {officer.name}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#475569", textTransform: "capitalize" }}>
+                          {(officer.officer_role ?? "officer").replace(/-/g, " ")}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>Appointed</div>
+                        <div style={{ fontSize: "12px", fontWeight: "500", color: "#475569", marginTop: "1px" }}>
+                          {fmtDate(officer.appointed_on)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Filings tab */}
+          {activeTab === "filings" && (
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Filing History</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  Last {filings.length}
+                </span>
+              </div>
+              {filings.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No filings found
+                </div>
+              ) : (
+                <div>
+                  {filings.map((filing: any, i: number) => (
+                    <div
+                      key={filing.transaction_id ?? `${filing.date}-${i}`}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        padding: "12px 18px",
+                        borderBottom: i < filings.length - 1 ? "1px solid #f1f5f9" : "none",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "13px", fontWeight: "500", color: "#0f172a", marginBottom: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {fmtFilingDesc(filing.description, filing.description_values)}
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          <span style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Courier New', monospace" }}>
+                            {filing.type ?? "—"}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#cbd5e1" }}>·</span>
+                          <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                            {fmtDate(filing.date)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Charges tab */}
+          {activeTab === "charges" && (
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Charges Register</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  {charges.length} {charges.length === 1 ? "charge" : "charges"}
+                </span>
+              </div>
+              {charges.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No charges registered
+                </div>
+              ) : (
+                <div>
+                  {charges.map((charge: any, i: number) => {
+                    const isOutstanding = charge.status === "outstanding";
+                    const isPartSatisfied = charge.status === "part-satisfied";
+                    const statusColor = isOutstanding ? "#dc2626" : isPartSatisfied ? "#d97706" : "#059669";
+                    const statusBg = isOutstanding ? "rgba(220,38,38,0.10)" : isPartSatisfied ? "rgba(217,119,6,0.10)" : "rgba(5,150,105,0.10)";
+                    const statusBorder = isOutstanding ? "rgba(220,38,38,0.25)" : isPartSatisfied ? "rgba(217,119,6,0.25)" : "rgba(5,150,105,0.25)";
+                    const lenderName = charge.persons_entitled?.[0]?.name ?? "Unknown lender";
+                    return (
+                      <div
+                        key={charge.charge_code ?? i}
+                        style={{
+                          padding: "13px 18px",
+                          borderBottom: i < charges.length - 1 ? "1px solid #f1f5f9" : "none",
+                          borderLeft: isOutstanding ? "3px solid #dc2626" : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "3px" }}>
+                              {lenderName}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#475569" }}>
+                              {charge.classification?.description ?? "Registered charge"}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right", flexShrink: 0 }}>
+                            <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "100px", fontSize: "11px", fontWeight: "600", color: statusColor, backgroundColor: statusBg, border: `1px solid ${statusBorder}`, textTransform: "capitalize" }}>
+                              {(charge.status ?? "unknown").replace(/-/g, " ")}
+                            </span>
+                            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                              {fmtDate(charge.created_on)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Ownership tab */}
+          {activeTab === "ownership" && (
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Persons with Significant Control</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  {pscs.length} PSC{pscs.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              {pscs.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No PSC information available
+                </div>
+              ) : (
+                <div>
+                  {pscs.map((psc: any, i: number) => {
+                    const isCorporate = psc.kind?.includes("corporate") || psc.kind?.includes("legal-person");
+                    const ukJurisdictions = ["england", "wales", "scotland", "northern ireland", "united kingdom", "great britain", "england and wales"];
+                    const residenceCountry = (psc.country_of_residence ?? psc.identification?.country_registered ?? psc.address?.country ?? "").toLowerCase().trim();
+                    const isOffshore = !!residenceCountry && !ukJurisdictions.some((j) => residenceCountry.includes(j));
+                    const ownershipBand = (() => {
+                      const share = psc.natures_of_control?.find((n: string) => n.includes("ownership-of-shares"));
+                      if (!share) return null;
+                      if (share.includes("25-to-50")) return "25–50%";
+                      if (share.includes("50-to-75")) return "50–75%";
+                      if (share.includes("75-to-100")) return "75–100%";
+                      if (share.includes("more-than-25")) return ">25%";
+                      return null;
+                    })();
+                    const natureSummary = psc.natures_of_control
+                      ?.map((n: string) =>
+                        n.replace(/-/g, " ").replace(/\b(\w)/g, (c: string) => c.toUpperCase())
+                          .replace("25 To 50 Percent", "25–50%")
+                          .replace("50 To 75 Percent", "50–75%")
+                          .replace("75 To 100 Percent", "75–100%")
+                          .replace("More Than 25 Percent", ">25%")
+                          .replace("Significant Influence Or Control", "Significant Influence / Control")
+                      )
+                      .join(" · ");
+                    return (
+                      <div
+                        key={psc.name ?? i}
+                        style={{
+                          padding: "13px 18px",
+                          borderBottom: i < pscs.length - 1 ? "1px solid #f1f5f9" : "none",
+                          borderLeft: isOffshore ? "3px solid #d97706" : isCorporate ? "3px solid #4f46e5" : "none",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "4px", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
+                                {psc.name ?? "Unknown"}
+                              </span>
+                              {isCorporate && (
+                                <span style={{ fontSize: "10px", fontWeight: "600", color: "#4f46e5", backgroundColor: "rgba(79,70,229,0.08)", padding: "1px 6px", borderRadius: "4px" }}>
+                                  Corporate
+                                </span>
+                              )}
+                              {isOffshore && (
+                                <span style={{ fontSize: "10px", fontWeight: "600", color: "#d97706", backgroundColor: "rgba(217,119,6,0.10)", padding: "1px 6px", borderRadius: "4px" }}>
+                                  Offshore
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: "12px", color: "#475569" }}>
+                              {natureSummary ?? "—"}
+                            </div>
+                          </div>
+                          {ownershipBand && (
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ownership</div>
+                              <div style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginTop: "2px" }}>{ownershipBand}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Director network tab */}
+          {activeTab === "director-network" && (
+            <div style={CARD}>
+              <div style={CARD_HEADER}>
+                <span style={CARD_TITLE}>Director Network</span>
+                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                  Layer 2 cross-reference
+                </span>
+              </div>
+              {appointments.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                  No director appointment data available
+                </div>
+              ) : (
+                <div style={{ padding: "16px 18px", fontSize: "13px", color: "#475569" }}>
+                  Director network data available — {appointments.length} officer{appointments.length !== 1 ? "s" : ""} with appointment data
+                </div>
+              )}
+            </div>
           )}
         </div>
 
