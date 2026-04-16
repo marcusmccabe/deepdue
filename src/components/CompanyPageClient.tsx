@@ -148,10 +148,13 @@ function DirectorNetworkGraph({
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [hovered, setHovered] = useState<{
-    x: number; y: number; name: string; role?: string; date?: string;
+  const [hoveredNode, setHoveredNode] = useState<{
+    x: number; y: number;
+    name: string; role?: string; date?: string;
     status?: string; kind: "centre" | "director" | "company";
+    companyNum?: string;
   } | null>(null);
+  const hideTimeout = useRef<any>(null);
   const [infoDir, setInfoDir] = useState<{
     name: string; role: string; appointed: string; otherCount: number;
   } | null>(null);
@@ -172,7 +175,7 @@ function DirectorNetworkGraph({
   const cx = width / 2;
   const cy = HEIGHT / 2;
   const R1 = Math.min(width * 0.22, 135);
-  const R2 = Math.min(width * 0.15, 85);
+  const R2 = Math.min(width * 0.18, 110);
 
   // ── Pre-compute director data ──────────────────────────────────────────────
   type DirInfo = {
@@ -240,10 +243,21 @@ function DirectorNetworkGraph({
 
     // Second-ring company nodes — only when expanded
     if (isExp && d.other.length > 0) {
-      const shown = d.other.slice(0, 8);
+      // Sort: active companies first, dissolved last
+      const sorted = [...d.other].sort((a: any, b: any) => {
+        const aD = a.appointed_to?.company_status === "dissolved" ? 1 : 0;
+        const bD = b.appointed_to?.company_status === "dissolved" ? 1 : 0;
+        return aD - bD;
+      });
+      const shown = sorted.slice(0, 6);
       const count = shown.length;
+
+      // Dynamic fan spread: wider for more nodes
+      const fanSpread = count >= 6 ? (110 * Math.PI / 180)
+        : count >= 4 ? (90 * Math.PI / 180)
+        : Math.max((count - 1) * 0.45, 0.15);
+
       shown.forEach((appt: any, ci: number) => {
-        const fanSpread = Math.min(Math.PI * 0.7, Math.max((count - 1) * 0.35, 0.1));
         const startA = d.angle - fanSpread / 2;
         const step = count > 1 ? fanSpread / (count - 1) : 0;
         const cAngle = count === 1 ? d.angle : startA + step * ci;
@@ -307,6 +321,29 @@ function DirectorNetworkGraph({
     });
   }
 
+  function showTooltip(n: GNode) {
+    if (hideTimeout.current) { clearTimeout(hideTimeout.current); hideTimeout.current = null; }
+    setHoveredNode({
+      x: n.x, y: n.y, name: n.label, role: n.role,
+      date: n.date ? fmtDate(n.date) : undefined,
+      status: n.companyStatus,
+      kind: n.kind as "centre" | "director" | "company",
+      companyNum: n.companyNum,
+    });
+  }
+
+  function scheduleHide() {
+    if (hideTimeout.current) clearTimeout(hideTimeout.current);
+    hideTimeout.current = setTimeout(() => {
+      setHoveredNode(null);
+      hideTimeout.current = null;
+    }, 150);
+  }
+
+  function cancelHide() {
+    if (hideTimeout.current) { clearTimeout(hideTimeout.current); hideTimeout.current = null; }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -320,10 +357,7 @@ function DirectorNetworkGraph({
             <line
               key={`e${i}`} x1={ax} y1={ay} x2={bx} y2={by}
               stroke={e.isSecondRing ? "#cbd5e1" : "#e2e8f0"} strokeWidth={1.5}
-              style={{
-                opacity: e.isSecondRing ? 1 : 1,
-                transition: "opacity 0.2s",
-              }}
+              style={{ transition: "opacity 0.2s" }}
             />
           );
         })}
@@ -338,25 +372,10 @@ function DirectorNetworkGraph({
                 : "pointer",
               transition: "opacity 0.2s",
             }}
-            onMouseEnter={(ev: any) => {
-              const rect = containerRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              if (n.kind === "company") {
-                setHovered({
-                  x: ev.clientX - rect.left, y: ev.clientY - rect.top,
-                  name: n.label, date: n.date ? fmtDate(n.date) : undefined,
-                  status: n.companyStatus, kind: "company",
-                });
-              } else if (n.kind === "director") {
-                setHovered({
-                  x: ev.clientX - rect.left, y: ev.clientY - rect.top,
-                  name: n.label, role: n.role,
-                  date: n.date ? fmtDate(n.date) : undefined,
-                  kind: "director",
-                });
-              }
+            onMouseEnter={() => {
+              if (n.kind === "company" || n.kind === "director") showTooltip(n);
             }}
-            onMouseLeave={() => setHovered(null)}
+            onMouseLeave={() => scheduleHide()}
             onClick={(ev: any) => {
               ev.stopPropagation();
               if (n.kind === "company" && n.companyNum) {
@@ -476,42 +495,50 @@ function DirectorNetworkGraph({
         </div>
       )}
 
-      {/* Tooltip */}
-      {hovered && (
+      {/* Tooltip — persists when hovering onto it */}
+      {hoveredNode && (
         <div
+          onMouseEnter={cancelHide}
+          onMouseLeave={() => setHoveredNode(null)}
           style={{
             position: "absolute",
-            left: Math.min(hovered.x + 12, width - 210),
-            top: Math.max(hovered.y - 50, 4),
+            left: Math.min(hoveredNode.x + 18, width - 230),
+            top: Math.max(hoveredNode.y - 50, 4),
             backgroundColor: "#0f172a", color: "#fff",
-            padding: "8px 12px", borderRadius: "6px",
-            fontSize: "11px", lineHeight: "1.5",
-            pointerEvents: "none", zIndex: 20,
-            maxWidth: "210px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            padding: "10px 14px", borderRadius: "8px",
+            fontSize: "11px", lineHeight: "1.6",
+            zIndex: 20, maxWidth: "220px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
           }}
         >
-          <div style={{ fontWeight: "600", marginBottom: "2px" }}>
-            {hovered.name}
+          <div style={{ fontWeight: "600", fontSize: "12px", marginBottom: "3px" }}>
+            {hoveredNode.name}
           </div>
-          {hovered.role && (
-            <div style={{ color: "#94a3b8", textTransform: "capitalize" }}>{hovered.role}</div>
+          {hoveredNode.role && (
+            <div style={{ color: "#94a3b8", textTransform: "capitalize" }}>{hoveredNode.role}</div>
           )}
-          {hovered.date && (
-            <div style={{ color: "#94a3b8" }}>Appointed: {hovered.date}</div>
+          {hoveredNode.date && (
+            <div style={{ color: "#94a3b8" }}>Appointed: {hoveredNode.date}</div>
           )}
-          {hovered.status && (
+          {hoveredNode.status && (
             <div style={{
-              color: hovered.status === "dissolved" ? "#fca5a5" : "#6ee7b7",
+              color: hoveredNode.status === "dissolved" ? "#fca5a5" : "#6ee7b7",
               textTransform: "capitalize",
             }}>
-              {hovered.status}
+              {hoveredNode.status}
             </div>
           )}
-          {hovered.kind === "company" && (
-            <div style={{ color: "#818cf8", marginTop: "3px", fontSize: "10px", fontWeight: "600" }}>
-              Click to view data
-            </div>
+          {hoveredNode.kind === "company" && hoveredNode.companyNum && (
+            <a
+              href={`/company/${hoveredNode.companyNum}`}
+              style={{
+                display: "inline-block", marginTop: "6px",
+                color: "#818cf8", fontWeight: "600", fontSize: "11px",
+                textDecoration: "none",
+              }}
+            >
+              View company &rarr;
+            </a>
           )}
         </div>
       )}
