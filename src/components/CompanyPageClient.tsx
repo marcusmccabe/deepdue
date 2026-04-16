@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
@@ -152,6 +152,40 @@ export default function CompanyPageClient({
   appointments?: any[];
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  // ── Director network state ──────────────────────────────────────────────────
+  const [networkData, setNetworkData] = useState<Record<string, any[]>>({});
+  const [networkLoading, setNetworkLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchNetwork() {
+      const results = await Promise.allSettled(
+        officers.map(async (officer: any) => {
+          const url = officer.links?.officer?.appointments;
+          if (!url) return { name: officer.name, items: [] };
+          const res = await fetch(`/api/officer-appointments?appointmentsUrl=${encodeURIComponent(url)}`);
+          const data = await res.json();
+          return { name: officer.name, items: data.items ?? [] };
+        })
+      );
+
+      const map: Record<string, any[]> = {};
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          map[r.value.name] = r.value.items;
+        }
+      }
+      setNetworkData(map);
+      setNetworkLoading(false);
+    }
+
+    if (officers.length > 0) {
+      fetchNetwork();
+    } else {
+      setNetworkLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -447,6 +481,82 @@ export default function CompanyPageClient({
                     </div>
                   );
                 })()}
+              </div>
+
+              {/* Director Network */}
+              <div style={CARD}>
+                <div style={CARD_HEADER}>
+                  <span style={CARD_TITLE}>Director Network</span>
+                  <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                    {officers.length} officer{officers.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {networkLoading ? (
+                  <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                    {[0, 1, 2].map((k) => (
+                      <div key={k} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <div style={{ width: "40%", height: "14px", backgroundColor: "#f1f5f9", borderRadius: "4px" }} />
+                        <div style={{ width: "70%", height: "12px", backgroundColor: "#f8fafc", borderRadius: "4px" }} />
+                        <div style={{ width: "55%", height: "12px", backgroundColor: "#f8fafc", borderRadius: "4px" }} />
+                      </div>
+                    ))}
+                  </div>
+                ) : officers.length === 0 ? (
+                  <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                    No officers found
+                  </div>
+                ) : (
+                  <div>
+                    {officers.map((officer: any, oi: number) => {
+                      const allAppts = networkData[officer.name] ?? [];
+                      const otherActive = allAppts.filter(
+                        (a: any) => !a.resigned_on && a.appointed_to?.company_number !== company.company_number
+                      );
+                      return (
+                        <div
+                          key={`${officer.name}-${oi}`}
+                          style={{
+                            padding: "14px 18px",
+                            borderBottom: oi < officers.length - 1 ? "1px solid #f1f5f9" : "none",
+                          }}
+                        >
+                          <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "2px" }}>
+                            {officer.name}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#94a3b8", textTransform: "capitalize", marginBottom: "8px" }}>
+                            {(officer.officer_role ?? "officer").replace(/-/g, " ")}
+                          </div>
+                          {otherActive.length === 0 ? (
+                            <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+                              No other directorships found
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {otherActive.slice(0, 5).map((appt: any, ai: number) => (
+                                <div key={ai} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                                  <a
+                                    href={`/company/${appt.appointed_to?.company_number}`}
+                                    style={{ fontSize: "12px", fontWeight: "500", color: "#4f46e5", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}
+                                  >
+                                    {appt.appointed_to?.company_name ?? "Unknown"}
+                                  </a>
+                                  <span style={{ fontSize: "11px", color: "#94a3b8", flexShrink: 0 }}>
+                                    {fmtDate(appt.appointed_on)}
+                                  </span>
+                                </div>
+                              ))}
+                              {otherActive.length > 5 && (
+                                <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "500", marginTop: "2px" }}>
+                                  +{otherActive.length - 5} more companies
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* AI analysis — Risks & Warnings now lives inside this card */}
