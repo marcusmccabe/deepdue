@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
   // ── 2. Filing history — accounts category only ────────────────────────────
   let filingItems: Array<{
     category?: string;
+    type?: string;
     date?: string;
     links?: { document_metadata?: string };
   }>;
@@ -84,10 +85,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 3. Most recent accounts filing with a downloadable document ───────────
-  const filing = filingItems.find(
-    (f) => f.category === "accounts" && f.links?.document_metadata
-  );
+  // ── 3. Most recent accounts filing — prefer full accounts over abbreviated ──
+  // Priority: AA (full) → AAMD (amended full) → AA01 (dormant/balance-sheet)
+  // → first item with a downloadable document as final fallback.
+  const PREFERRED_TYPES = ["AA", "AAMD", "AA01"];
+  const withDocument = filingItems.filter((f) => f.links?.document_metadata);
+
+  const filing =
+    PREFERRED_TYPES.reduce<(typeof withDocument)[0] | undefined>(
+      (found, type) =>
+        found ?? withDocument.find((f) => f.type === type),
+      undefined
+    ) ?? withDocument[0];
 
   if (!filing) {
     return NextResponse.json(
@@ -95,6 +104,10 @@ export async function GET(request: NextRequest) {
       { status: 404 }
     );
   }
+
+  console.log(
+    `[analyse-accounts][diag] selected filing type: ${filing.type ?? "unknown"} | date: ${filing.date ?? "unknown"}`
+  );
 
   const metadataUrl = filing.links!.document_metadata!;
   const idMatch = metadataUrl.match(/\/document\/([^/?]+)/);

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
-import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -135,20 +134,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function SkeletonBlock({ height = 20, width = "100%" }: { height?: number; width?: string | number }) {
-  return (
-    <div
-      style={{
-        height,
-        width,
-        borderRadius: "6px",
-        backgroundColor: "#e2e8f0",
-        animation: "skeletonPulse 1.4s ease-in-out infinite",
-      }}
-    />
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CompanyPageClient({
@@ -167,45 +152,9 @@ export default function CompanyPageClient({
   appointments?: any[];
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
-  const [analysis, setAnalysis] = useState<AccountsAnalysis | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(
-      `/api/analyse-accounts?companyNumber=${encodeURIComponent(
-        company.company_number
-      )}`
-    )
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!cancelled) setAnalysis(data);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [company.company_number]);
-
-  const fh = analysis?.financialHealth;
-
-  const snapMetrics: { label: string; value: string | undefined }[] = [
-    { label: "Revenue", value: fh?.revenue.value },
-    { label: "Gross Profit", value: fh?.grossProfit.value },
-    { label: "Operating Profit", value: fh?.operatingProfit.value },
-    { label: "Net Profit", value: fh?.netProfit.value },
-    { label: "Cash Position", value: fh?.cashPosition },
-    { label: "Net Assets", value: fh?.netAssets },
-  ];
 
   return (
     <>
-      <style>{`
-        @keyframes skeletonPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.45; }
-        }
-      `}</style>
-
       {/* Company header */}
       <div
         style={{
@@ -296,80 +245,6 @@ export default function CompanyPageClient({
           {/* Overview tab */}
           {activeTab === "overview" && (
             <>
-              {/* Financial snapshot card */}
-              <div style={CARD}>
-                <div style={CARD_HEADER}>
-                  <span style={CARD_TITLE}>Financial Snapshot</span>
-                </div>
-                <div style={{ padding: "16px 18px" }}>
-                  {analysis === null ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
-                        gap: "10px",
-                      }}
-                    >
-                      {snapMetrics.map((m) => (
-                        <div
-                          key={m.label}
-                          style={{
-                            backgroundColor: "#f8fafc",
-                            borderRadius: "8px",
-                            padding: "12px",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <div style={{ ...LABEL, marginBottom: "8px" }}>
-                            {m.label}
-                          </div>
-                          <SkeletonBlock height={20} width="70%" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
-                        gap: "10px",
-                      }}
-                    >
-                      {snapMetrics.map((m) => {
-                        const missing =
-                          m.value == null ||
-                          m.value === "" ||
-                          m.value === "n/a" ||
-                          m.value === "N/A";
-                        return (
-                          <div
-                            key={m.label}
-                            style={{
-                              backgroundColor: "#f8fafc",
-                              borderRadius: "8px",
-                              padding: "12px",
-                              border: "1px solid #e2e8f0",
-                            }}
-                          >
-                            <div style={LABEL}>{m.label}</div>
-                            <div
-                              style={{
-                                fontSize: "15px",
-                                fontWeight: "800",
-                                color: missing ? "#cbd5e1" : "#0f172a",
-                                lineHeight: "1.2",
-                              }}
-                            >
-                              {missing ? "—" : m.value}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Directors & Officers */}
               <div style={CARD}>
                 <div style={CARD_HEADER}>
