@@ -362,6 +362,93 @@ export default function CompanyPageClient({
                 )}
               </div>
 
+              {/* Company Timeline */}
+              <div style={CARD}>
+                <div style={CARD_HEADER}>
+                  <span style={CARD_TITLE}>Company Timeline</span>
+                  <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+                    Last 15 events
+                  </span>
+                </div>
+                {(() => {
+                  type TimelineEvent = { date: string; label: string; dotColor: string };
+                  const events: TimelineEvent[] = [];
+
+                  if (company.date_of_creation) {
+                    events.push({ date: company.date_of_creation, label: "Company incorporated", dotColor: "#4f46e5" });
+                  }
+
+                  for (const f of filings) {
+                    const type = (f.type ?? "").toUpperCase();
+                    let label: string;
+                    let dotColor: string;
+
+                    if (type === "AA" || type === "AAMD") {
+                      label = "Full accounts filed"; dotColor = "#4f46e5";
+                    } else if (type === "CS01") {
+                      label = "Confirmation statement"; dotColor = "#059669";
+                    } else if (["AP01", "AP02", "AP03"].includes(type)) {
+                      label = "Officer appointed"; dotColor = "#d97706";
+                    } else if (["TM01", "TM02"].includes(type)) {
+                      label = "Officer resigned"; dotColor = "#dc2626";
+                    } else if (["CH01", "CH02", "CH03", "CH04"].includes(type)) {
+                      label = "Director details changed"; dotColor = "#94a3b8";
+                    } else if (type === "MR01") {
+                      label = "Charge registered"; dotColor = "#dc2626";
+                    } else if (type === "MR04") {
+                      label = "Charge satisfied"; dotColor = "#059669";
+                    } else if (type.startsWith("PSC")) {
+                      label = "PSC change"; dotColor = "#d97706";
+                    } else {
+                      label = fmtFilingDesc(f.description, f.description_values); dotColor = "#94a3b8";
+                    }
+
+                    events.push({ date: f.date ?? "", label, dotColor });
+                  }
+
+                  events.sort((a, b) => b.date.localeCompare(a.date));
+                  const top = events.slice(0, 15);
+
+                  if (top.length === 0) {
+                    return (
+                      <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+                        No events found
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ padding: "12px 18px" }}>
+                      {top.map((evt, i) => (
+                        <div
+                          key={`${evt.date}-${i}`}
+                          style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}
+                        >
+                          {/* Dot + connecting line */}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "12px", flexShrink: 0 }}>
+                            <div style={{
+                              width: "8px", height: "8px", borderRadius: "50%",
+                              backgroundColor: evt.dotColor, marginTop: "5px", flexShrink: 0,
+                            }} />
+                            {i < top.length - 1 && (
+                              <div style={{ width: "2px", flex: 1, backgroundColor: "#e2e8f0", minHeight: "24px" }} />
+                            )}
+                          </div>
+                          {/* Date */}
+                          <div style={{ width: "110px", flexShrink: 0, fontSize: "11px", color: "#94a3b8", fontWeight: "500", paddingTop: "2px" }}>
+                            {fmtDate(evt.date)}
+                          </div>
+                          {/* Description */}
+                          <div style={{ flex: 1, fontSize: "13px", color: "#0f172a", fontWeight: "500", paddingBottom: "16px", paddingTop: "1px" }}>
+                            {evt.label}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
               {/* AI analysis — Risks & Warnings now lives inside this card */}
               <AIAnalysisCard companyNumber={company.company_number} />
             </>
