@@ -141,6 +141,13 @@ export async function GET(request: NextRequest) {
     console.log(
       `[analyse-accounts] ${companyNumber}: downloaded ${Math.round(buffer.byteLength / 1024)} KB PDF`
     );
+    // ── TEMP DIAGNOSTIC: log PDF URL and first 200 chars of base64 ─────────
+    console.log(
+      `[analyse-accounts][diag] PDF URL: ${CH_DOC_BASE}/document/${documentId}/content`
+    );
+    console.log(
+      `[analyse-accounts][diag] pdfBase64 first 200 chars: ${pdfBase64.slice(0, 200)}`
+    );
   } catch {
     return NextResponse.json(
       { error: "Network error downloading document" },
@@ -251,7 +258,8 @@ export async function GET(request: NextRequest) {
     console.log(
       `[analyse-accounts] ${companyNumber}: Claude responded (${rawText.length} chars)`
     );
-  } catch {
+  } catch (err) {
+    console.error("[analyse-accounts] Anthropic fetch threw:", err);
     return NextResponse.json(
       { error: "Network error calling Anthropic API" },
       { status: 502 }
@@ -339,6 +347,11 @@ export async function GET(request: NextRequest) {
       documentDate: filing.date,
       cached: false,
     };
+    // ── TEMP DIAGNOSTIC: log parsed financialHealth ───────────────────────
+    console.log(
+      `[analyse-accounts][diag] parsed financialHealth:`,
+      JSON.stringify(analysis.financialHealth, null, 2)
+    );
   } catch {
     console.error("[analyse-accounts] JSON parse failed. Raw text:", rawText.slice(0, 500));
     return NextResponse.json(
