@@ -147,10 +147,14 @@ function DirectorNetworkGraph({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<{
     x: number; y: number; name: string; role?: string; date?: string;
+    status?: string; kind: "centre" | "director" | "company";
   } | null>(null);
-  const [selectedDir, setSelectedDir] = useState<string | null>(null);
+  const [infoDir, setInfoDir] = useState<{
+    name: string; role: string; appointed: string; otherCount: number;
+  } | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -164,22 +168,48 @@ function DirectorNetworkGraph({
     return () => ro.disconnect();
   }, []);
 
-  const HEIGHT = 420;
+  const HEIGHT = 480;
   const cx = width / 2;
   const cy = HEIGHT / 2;
-  const R1 = Math.min(width * 0.2, 120);
-  const R2 = Math.min(width * 0.12, 70);
+  const R1 = Math.min(width * 0.22, 135);
+  const R2 = Math.min(width * 0.15, 85);
 
+  // ── Pre-compute director data ──────────────────────────────────────────────
+  type DirInfo = {
+    officer: any; index: number; angle: number; dx: number; dy: number;
+    dirName: string; role: string; other: any[];
+  };
+
+  const dirCount = officers.length;
+  const dirs: DirInfo[] = officers.map((off: any, i: number) => {
+    const angle = (2 * Math.PI * i) / Math.max(dirCount, 1) - Math.PI / 2;
+    const dirName = off.name ?? `Officer ${i}`;
+    const allAppts = networkData[dirName] ?? [];
+    const other = allAppts.filter(
+      (a: any) => !a.resigned_on && a.appointed_to?.company_number !== company.company_number
+    );
+    return {
+      officer: off, index: i, angle,
+      dx: cx + R1 * Math.cos(angle),
+      dy: cy + R1 * Math.sin(angle),
+      dirName,
+      role: (off.officer_role ?? "officer").replace(/-/g, " "),
+      other,
+    };
+  });
+
+  // ── Build nodes and edges ──────────────────────────────────────────────────
   type GNode = {
     id: string; x: number; y: number; r: number;
     label: string; fill: string; stroke?: string; strokeDash?: string;
     kind: "centre" | "director" | "company";
     dirName?: string; companyNum?: string; role?: string; date?: string;
-    totalOther?: number;
+    totalOther?: number; expandable?: boolean; isExpanded?: boolean;
+    companyStatus?: string;
   };
   type GEdge = {
     x1: number; y1: number; x2: number; y2: number;
-    r1: number; r2: number; dirName?: string;
+    r1: number; r2: number; dirName?: string; isSecondRing?: boolean;
   };
 
   const nodes: GNode[] = [];
@@ -193,53 +223,55 @@ function DirectorNetworkGraph({
   });
 
   // Director + company nodes
-  const dirCount = officers.length;
-  officers.forEach((off: any, i: number) => {
-    const angle = (2 * Math.PI * i) / Math.max(dirCount, 1) - Math.PI / 2;
-    const dx = cx + R1 * Math.cos(angle);
-    const dy = cy + R1 * Math.sin(angle);
-    const dirName = off.name ?? `Officer ${i}`;
-
-    const allAppts = networkData[dirName] ?? [];
-    const other = allAppts.filter(
-      (a: any) => !a.resigned_on && a.appointed_to?.company_number !== company.company_number
-    );
+  dirs.forEach((d) => {
+    const isExp = expanded.has(d.dirName);
+    const expandable = d.other.length > 0;
 
     nodes.push({
-      id: `d${i}`, x: dx, y: dy, r: 18, label: dirName, fill: "#334155",
-      kind: "director", dirName,
-      role: (off.officer_role ?? "officer").replace(/-/g, " "),
-      totalOther: other.length,
+      id: `d${d.index}`, x: d.dx, y: d.dy, r: 20,
+      label: d.dirName,
+      fill: expandable ? "#334155" : "#64748b",
+      kind: "director", dirName: d.dirName,
+      role: d.role, totalOther: d.other.length,
+      expandable, isExpanded: isExp,
+      date: d.officer.appointed_on,
     });
-    edges.push({ x1: cx, y1: cy, x2: dx, y2: dy, r1: 28, r2: 18, dirName });
+    edges.push({ x1: cx, y1: cy, x2: d.dx, y2: d.dy, r1: 28, r2: 20, dirName: d.dirName });
 
-    const shown = other.slice(0, 6);
-    const count = shown.length;
-    shown.forEach((appt: any, ci: number) => {
-      const fanSpread = Math.min(Math.PI * 0.6, Math.max((count - 1) * 0.4, 0.1));
-      const startA = angle - fanSpread / 2;
-      const step = count > 1 ? fanSpread / (count - 1) : 0;
-      const cAngle = count === 1 ? angle : startA + step * ci;
-      const compX = dx + R2 * Math.cos(cAngle);
-      const compY = dy + R2 * Math.sin(cAngle);
-      const dissolved = appt.appointed_to?.company_status === "dissolved";
+    // Second-ring company nodes — only when expanded
+    if (isExp && d.other.length > 0) {
+      const shown = d.other.slice(0, 8);
+      const count = shown.length;
+      shown.forEach((appt: any, ci: number) => {
+        const fanSpread = Math.min(Math.PI * 0.7, Math.max((count - 1) * 0.35, 0.1));
+        const startA = d.angle - fanSpread / 2;
+        const step = count > 1 ? fanSpread / (count - 1) : 0;
+        const cAngle = count === 1 ? d.angle : startA + step * ci;
+        const compX = d.dx + R2 * Math.cos(cAngle);
+        const compY = d.dy + R2 * Math.sin(cAngle);
+        const dissolved = appt.appointed_to?.company_status === "dissolved";
+        const status = appt.appointed_to?.company_status ?? "unknown";
 
-      nodes.push({
-        id: `co${i}-${ci}`, x: compX, y: compY, r: 10,
-        label: appt.appointed_to?.company_name ?? "Unknown",
-        fill: dissolved ? "transparent" : "#cbd5e1",
-        stroke: dissolved ? "#cbd5e1" : undefined,
-        strokeDash: dissolved ? "3,2" : undefined,
-        kind: "company", dirName, companyNum: appt.appointed_to?.company_number,
-        date: appt.appointed_on,
+        nodes.push({
+          id: `co${d.index}-${ci}`, x: compX, y: compY, r: 12,
+          label: appt.appointed_to?.company_name ?? "Unknown",
+          fill: dissolved ? "#f8fafc" : "#e2e8f0",
+          stroke: dissolved ? "#cbd5e1" : "#94a3b8",
+          strokeDash: dissolved ? "3,2" : undefined,
+          kind: "company", dirName: d.dirName,
+          companyNum: appt.appointed_to?.company_number,
+          date: appt.appointed_on, companyStatus: status,
+        });
+        edges.push({
+          x1: d.dx, y1: d.dy, x2: compX, y2: compY,
+          r1: 20, r2: 12, dirName: d.dirName, isSecondRing: true,
+        });
       });
-      edges.push({ x1: dx, y1: dy, x2: compX, y2: compY, r1: 18, r2: 10, dirName });
-    });
+    }
   });
 
   const trunc = (s: string, max: number) =>
     s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
-  const lit = (dirName?: string) => !selectedDir || selectedDir === dirName;
 
   function clipEdge(e: GEdge) {
     const ddx = e.x2 - e.x1;
@@ -254,11 +286,31 @@ function DirectorNetworkGraph({
     };
   }
 
+  function toggleExpand(dirName: string) {
+    setExpanded((prev: Set<string>) => {
+      const next = new Set(prev);
+      if (next.has(dirName)) {
+        next.delete(dirName);
+        setInfoDir(null);
+      } else {
+        next.add(dirName);
+        const d = dirs.find((dd) => dd.dirName === dirName);
+        if (d) {
+          setInfoDir({
+            name: d.dirName, role: d.role,
+            appointed: fmtDate(d.officer.appointed_on),
+            otherCount: d.other.length,
+          });
+        }
+      }
+      return next;
+    });
+  }
+
   return (
     <div
       ref={containerRef}
       style={{ position: "relative", width: "100%", height: HEIGHT, overflow: "hidden" }}
-      onClick={() => setSelectedDir(null)}
     >
       <svg width={width} height={HEIGHT} style={{ display: "block" }}>
         {/* Edges */}
@@ -267,98 +319,179 @@ function DirectorNetworkGraph({
           return (
             <line
               key={`e${i}`} x1={ax} y1={ay} x2={bx} y2={by}
-              stroke="#e2e8f0" strokeWidth={1.5}
-              style={{ opacity: lit(e.dirName) ? 1 : 0.12, transition: "opacity 0.2s" }}
+              stroke={e.isSecondRing ? "#cbd5e1" : "#e2e8f0"} strokeWidth={1.5}
+              style={{
+                opacity: e.isSecondRing ? 1 : 1,
+                transition: "opacity 0.2s",
+              }}
             />
           );
         })}
 
         {/* Nodes */}
-        {nodes.map((n) => {
-          const dim = !lit(n.dirName) && n.kind !== "centre";
-          return (
-            <g
-              key={n.id}
-              style={{
-                cursor: n.kind !== "centre" ? "pointer" : "default",
-                opacity: dim ? 0.12 : 1,
-                transition: "opacity 0.2s",
-              }}
-              onMouseEnter={(ev: any) => {
-                const rect = containerRef.current?.getBoundingClientRect();
-                if (!rect) return;
+        {nodes.map((n) => (
+          <g
+            key={n.id}
+            style={{
+              cursor: n.kind === "centre" ? "default"
+                : n.kind === "director" && !n.expandable ? "default"
+                : "pointer",
+              transition: "opacity 0.2s",
+            }}
+            onMouseEnter={(ev: any) => {
+              const rect = containerRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              if (n.kind === "company") {
+                setHovered({
+                  x: ev.clientX - rect.left, y: ev.clientY - rect.top,
+                  name: n.label, date: n.date ? fmtDate(n.date) : undefined,
+                  status: n.companyStatus, kind: "company",
+                });
+              } else if (n.kind === "director") {
                 setHovered({
                   x: ev.clientX - rect.left, y: ev.clientY - rect.top,
                   name: n.label, role: n.role,
                   date: n.date ? fmtDate(n.date) : undefined,
+                  kind: "director",
                 });
-              }}
-              onMouseLeave={() => setHovered(null)}
-              onClick={(ev: any) => {
-                ev.stopPropagation();
-                if (n.kind === "company" && n.companyNum) {
-                  window.location.href = `/company/${n.companyNum}`;
-                } else if (n.kind === "director") {
-                  setSelectedDir(selectedDir === n.dirName ? null : n.dirName ?? null);
-                }
-              }}
-            >
+              }
+            }}
+            onMouseLeave={() => setHovered(null)}
+            onClick={(ev: any) => {
+              ev.stopPropagation();
+              if (n.kind === "company" && n.companyNum) {
+                window.location.href = `/company/${n.companyNum}`;
+              } else if (n.kind === "director" && n.expandable) {
+                toggleExpand(n.dirName!);
+              }
+            }}
+          >
+            {/* Node circle */}
+            <circle
+              cx={n.x} cy={n.y} r={n.r} fill={n.fill}
+              stroke={n.stroke ?? "none"} strokeWidth={n.stroke ? 1.5 : 0}
+              strokeDasharray={n.strokeDash ?? "none"}
+            />
+
+            {/* Director: +/− indicator inside circle */}
+            {n.kind === "director" && n.expandable && (
+              <text
+                x={n.x} y={n.y + 5}
+                textAnchor="middle" fontSize="16" fontWeight="700" fill="#fff"
+                style={{ pointerEvents: "none" }}
+              >
+                {n.isExpanded ? "\u2212" : "+"}
+              </text>
+            )}
+
+            {/* Director: amber count badge (top-right) */}
+            {n.kind === "director" && (n.totalOther ?? 0) > 0 && (
+              <>
+                <circle cx={n.x + 15} cy={n.y - 15} r={9} fill="#d97706" />
+                <text
+                  x={n.x + 15} y={n.y - 11.5}
+                  textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {n.totalOther}
+                </text>
+              </>
+            )}
+
+            {/* Company node: status dot */}
+            {n.kind === "company" && (
               <circle
-                cx={n.x} cy={n.y} r={n.r} fill={n.fill}
-                stroke={n.stroke ?? "none"} strokeWidth={n.stroke ? 1.5 : 0}
-                strokeDasharray={n.strokeDash ?? "none"}
+                cx={n.x + 9} cy={n.y - 9} r={3.5}
+                fill={n.companyStatus === "dissolved" ? "#dc2626" : "#059669"}
               />
-              {/* Badge for >5 other appointments */}
-              {n.kind === "director" && (n.totalOther ?? 0) > 5 && (
-                <>
-                  <circle cx={n.x + 13} cy={n.y - 13} r={8} fill="#d97706" />
-                  <text
-                    x={n.x + 13} y={n.y - 9.5}
-                    textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff"
-                  >
-                    {n.totalOther}
-                  </text>
-                </>
-              )}
-              {/* Centre label */}
-              {n.kind === "centre" && (
-                <text
-                  x={n.x} y={n.y + n.r + 14}
-                  textAnchor="middle" fontSize="11" fontWeight="700" fill="#4f46e5"
-                >
-                  {trunc(n.label, 28)}
-                </text>
-              )}
-              {/* Director label */}
-              {n.kind === "director" && (
-                <text
-                  x={n.x} y={n.y > cy + 40 ? n.y - n.r - 5 : n.y + n.r + 12}
-                  textAnchor="middle" fontSize="9" fontWeight="600" fill="#334155"
-                >
-                  {trunc(n.label, 20)}
-                </text>
-              )}
-            </g>
-          );
-        })}
+            )}
+
+            {/* Centre label */}
+            {n.kind === "centre" && (
+              <text
+                x={n.x} y={n.y + n.r + 16}
+                textAnchor="middle" fontSize="11" fontWeight="700" fill="#4f46e5"
+                style={{ pointerEvents: "none" }}
+              >
+                {trunc(n.label, 28)}
+              </text>
+            )}
+
+            {/* Director label */}
+            {n.kind === "director" && (
+              <text
+                x={n.x} y={n.y > cy + 50 ? n.y - n.r - 6 : n.y + n.r + 13}
+                textAnchor="middle" fontSize="9" fontWeight="600"
+                fill={n.expandable ? "#334155" : "#94a3b8"}
+                style={{ pointerEvents: "none" }}
+              >
+                {trunc(n.label, 20)}
+              </text>
+            )}
+
+            {/* Company label (truncated name) */}
+            {n.kind === "company" && (
+              <text
+                x={n.x} y={n.y + n.r + 11}
+                textAnchor="middle" fontSize="8" fontWeight="500" fill="#64748b"
+                style={{ pointerEvents: "none" }}
+              >
+                {trunc(n.label, 18)}
+              </text>
+            )}
+          </g>
+        ))}
       </svg>
+
+      {/* Info panel — top-left */}
+      {infoDir && (
+        <div
+          style={{
+            position: "absolute", top: "10px", left: "10px",
+            backgroundColor: "#fff", border: "1px solid #e2e8f0",
+            borderRadius: "8px", padding: "10px 14px",
+            fontSize: "11px", lineHeight: "1.6",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            maxWidth: "220px", zIndex: 10,
+          }}
+        >
+          <div style={{ fontWeight: "700", fontSize: "12px", color: "#0f172a", marginBottom: "2px" }}>
+            {infoDir.name}
+          </div>
+          <div style={{ color: "#64748b", textTransform: "capitalize" }}>{infoDir.role}</div>
+          <div style={{ color: "#64748b" }}>Appointed: {infoDir.appointed}</div>
+          <div style={{ color: "#334155", fontWeight: "600", marginTop: "4px" }}>
+            {infoDir.otherCount} other directorship{infoDir.otherCount !== 1 ? "s" : ""}
+          </div>
+          <button
+            onClick={() => setInfoDir(null)}
+            style={{
+              position: "absolute", top: "6px", right: "8px",
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: "14px", color: "#94a3b8", lineHeight: "1",
+            }}
+          >
+            x
+          </button>
+        </div>
+      )}
 
       {/* Tooltip */}
       {hovered && (
         <div
           style={{
             position: "absolute",
-            left: Math.min(hovered.x + 12, width - 200),
-            top: Math.max(hovered.y - 40, 4),
+            left: Math.min(hovered.x + 12, width - 210),
+            top: Math.max(hovered.y - 50, 4),
             backgroundColor: "#0f172a", color: "#fff",
             padding: "8px 12px", borderRadius: "6px",
             fontSize: "11px", lineHeight: "1.5",
-            pointerEvents: "none", zIndex: 10,
-            maxWidth: "200px",
+            pointerEvents: "none", zIndex: 20,
+            maxWidth: "210px",
             boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
           }}
         >
-          <div style={{ fontWeight: "600", marginBottom: hovered.role || hovered.date ? "2px" : 0 }}>
+          <div style={{ fontWeight: "600", marginBottom: "2px" }}>
             {hovered.name}
           </div>
           {hovered.role && (
@@ -366,6 +499,19 @@ function DirectorNetworkGraph({
           )}
           {hovered.date && (
             <div style={{ color: "#94a3b8" }}>Appointed: {hovered.date}</div>
+          )}
+          {hovered.status && (
+            <div style={{
+              color: hovered.status === "dissolved" ? "#fca5a5" : "#6ee7b7",
+              textTransform: "capitalize",
+            }}>
+              {hovered.status}
+            </div>
+          )}
+          {hovered.kind === "company" && (
+            <div style={{ color: "#818cf8", marginTop: "3px", fontSize: "10px", fontWeight: "600" }}>
+              Click to view data
+            </div>
           )}
         </div>
       )}
@@ -731,7 +877,7 @@ export default function CompanyPageClient({
                   </span>
                 </div>
                 {networkLoading ? (
-                  <div style={{ height: "420px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ height: "480px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
                       <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#f1f5f9" }} />
                       <div style={{ display: "flex", gap: "40px" }}>
