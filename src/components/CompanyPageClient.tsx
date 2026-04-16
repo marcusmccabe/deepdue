@@ -155,6 +155,11 @@ function DirectorNetworkGraph({
     companyNum?: string;
   } | null>(null);
   const hideTimeout = useRef<any>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0 });
+  const didDrag = useRef(false);
   const [infoDir, setInfoDir] = useState<{
     name: string; role: string; appointed: string; otherCount: number;
   } | null>(null);
@@ -301,6 +306,8 @@ function DirectorNetworkGraph({
   }
 
   function toggleExpand(dirName: string) {
+    const wasExpanded = expanded.has(dirName);
+
     setExpanded((prev: Set<string>) => {
       const next = new Set(prev);
       if (next.has(dirName)) {
@@ -319,6 +326,37 @@ function DirectorNetworkGraph({
       }
       return next;
     });
+
+    // Auto-pan when expanding if company nodes would be clipped
+    if (!wasExpanded) {
+      const d = dirs.find((dd) => dd.dirName === dirName);
+      if (d && d.other.length > 0) {
+        const sorted = [...d.other].sort((a: any, b: any) => {
+          const aD = a.appointed_to?.company_status === "dissolved" ? 1 : 0;
+          const bD = b.appointed_to?.company_status === "dissolved" ? 1 : 0;
+          return aD - bD;
+        });
+        const count = Math.min(sorted.length, 6);
+        const fanSpread = count >= 6 ? (110 * Math.PI / 180)
+          : count >= 4 ? (90 * Math.PI / 180)
+          : Math.max((count - 1) * 0.45, 0.15);
+
+        let sumY = 0;
+        for (let ci = 0; ci < count; ci++) {
+          const startA = d.angle - fanSpread / 2;
+          const step = count > 1 ? fanSpread / (count - 1) : 0;
+          const cAngle = count === 1 ? d.angle : startA + step * ci;
+          sumY += d.dy + R2 * Math.sin(cAngle);
+        }
+        const avgY = sumY / count;
+
+        if (avgY + pan.y < 60) {
+          setPan((p: { x: number; y: number }) => ({ ...p, y: 40 - avgY }));
+        } else if (avgY + pan.y > HEIGHT - 60) {
+          setPan((p: { x: number; y: number }) => ({ ...p, y: HEIGHT - 40 - avgY }));
+        }
+      }
+    }
   }
 
   function showTooltip(n: GNode) {
@@ -345,204 +383,258 @@ function DirectorNetworkGraph({
   }
 
   return (
-    <div
-      ref={containerRef}
-      style={{ position: "relative", width: "100%", height: HEIGHT, overflow: "hidden" }}
-    >
-      <svg width={width} height={HEIGHT} style={{ display: "block" }}>
-        {/* Edges */}
-        {edges.map((e, i) => {
-          const { ax, ay, bx, by } = clipEdge(e);
-          return (
-            <line
-              key={`e${i}`} x1={ax} y1={ay} x2={bx} y2={by}
-              stroke={e.isSecondRing ? "#cbd5e1" : "#e2e8f0"} strokeWidth={1.5}
-              style={{ transition: "opacity 0.2s" }}
-            />
-          );
-        })}
+    <>
+      <div
+        ref={containerRef}
+        style={{ position: "relative", width: "100%", height: HEIGHT, overflow: "hidden" }}
+      >
+        <svg
+          width={width} height={HEIGHT}
+          style={{ display: "block", cursor: dragging ? "grabbing" : "grab" }}
+          onMouseDown={(e: any) => {
+            isPanning.current = true;
+            didDrag.current = false;
+            panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+            setHoveredNode(null);
+            if (hideTimeout.current) { clearTimeout(hideTimeout.current); hideTimeout.current = null; }
+          }}
+          onMouseMove={(e: any) => {
+            if (!isPanning.current) return;
+            const nx = e.clientX - panStart.current.x;
+            const ny = e.clientY - panStart.current.y;
+            if (!didDrag.current) {
+              if (Math.abs(nx - pan.x) + Math.abs(ny - pan.y) < 3) return;
+              didDrag.current = true;
+              setDragging(true);
+            }
+            setPan({ x: nx, y: ny });
+          }}
+          onMouseUp={() => {
+            isPanning.current = false;
+            if (didDrag.current) setDragging(false);
+          }}
+          onMouseLeave={() => {
+            isPanning.current = false;
+            if (didDrag.current) setDragging(false);
+          }}
+        >
+          <g transform={`translate(${pan.x},${pan.y})`}>
+            {/* Edges */}
+            {edges.map((e, i) => {
+              const { ax, ay, bx, by } = clipEdge(e);
+              return (
+                <line
+                  key={`e${i}`} x1={ax} y1={ay} x2={bx} y2={by}
+                  stroke={e.isSecondRing ? "#cbd5e1" : "#e2e8f0"} strokeWidth={1.5}
+                  style={{ transition: "opacity 0.2s" }}
+                />
+              );
+            })}
 
-        {/* Nodes */}
-        {nodes.map((n) => (
-          <g
-            key={n.id}
-            style={{
-              cursor: n.kind === "centre" ? "default"
-                : n.kind === "director" && !n.expandable ? "default"
-                : "pointer",
-              transition: "opacity 0.2s",
-            }}
-            onMouseEnter={() => {
-              if (n.kind === "company" || n.kind === "director") showTooltip(n);
-            }}
-            onMouseLeave={() => scheduleHide()}
-            onClick={(ev: any) => {
-              ev.stopPropagation();
-              if (n.kind === "company" && n.companyNum) {
-                window.location.href = `/company/${n.companyNum}`;
-              } else if (n.kind === "director" && n.expandable) {
-                toggleExpand(n.dirName!);
-              }
-            }}
-          >
-            {/* Node circle */}
-            <circle
-              cx={n.x} cy={n.y} r={n.r} fill={n.fill}
-              stroke={n.stroke ?? "none"} strokeWidth={n.stroke ? 1.5 : 0}
-              strokeDasharray={n.strokeDash ?? "none"}
-            />
-
-            {/* Director: +/− indicator inside circle */}
-            {n.kind === "director" && n.expandable && (
-              <text
-                x={n.x} y={n.y + 5}
-                textAnchor="middle" fontSize="16" fontWeight="700" fill="#fff"
-                style={{ pointerEvents: "none" }}
+            {/* Nodes */}
+            {nodes.map((n) => (
+              <g
+                key={n.id}
+                style={{
+                  cursor: n.kind === "centre" ? "default"
+                    : n.kind === "director" && !n.expandable ? "default"
+                    : "pointer",
+                  transition: "opacity 0.2s",
+                }}
+                onMouseEnter={() => {
+                  if (!isPanning.current && (n.kind === "company" || n.kind === "director")) showTooltip(n);
+                }}
+                onMouseLeave={() => scheduleHide()}
+                onClick={(ev: any) => {
+                  ev.stopPropagation();
+                  if (didDrag.current) return;
+                  if (n.kind === "company" && n.companyNum) {
+                    window.location.href = `/company/${n.companyNum}`;
+                  } else if (n.kind === "director" && n.expandable) {
+                    toggleExpand(n.dirName!);
+                  }
+                }}
               >
-                {n.isExpanded ? "\u2212" : "+"}
-              </text>
-            )}
+                {/* Node circle */}
+                <circle
+                  cx={n.x} cy={n.y} r={n.r} fill={n.fill}
+                  stroke={n.stroke ?? "none"} strokeWidth={n.stroke ? 1.5 : 0}
+                  strokeDasharray={n.strokeDash ?? "none"}
+                />
 
-            {/* Director: amber count badge (top-right) */}
-            {n.kind === "director" && (n.totalOther ?? 0) > 0 && (
-              <>
-                <circle cx={n.x + 15} cy={n.y - 15} r={9} fill="#d97706" />
-                <text
-                  x={n.x + 15} y={n.y - 11.5}
-                  textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff"
-                  style={{ pointerEvents: "none" }}
-                >
-                  {n.totalOther}
-                </text>
-              </>
-            )}
+                {/* Director: +/− indicator inside circle */}
+                {n.kind === "director" && n.expandable && (
+                  <text
+                    x={n.x} y={n.y + 5}
+                    textAnchor="middle" fontSize="16" fontWeight="700" fill="#fff"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {n.isExpanded ? "\u2212" : "+"}
+                  </text>
+                )}
 
-            {/* Company node: status dot */}
-            {n.kind === "company" && (
-              <circle
-                cx={n.x + 9} cy={n.y - 9} r={3.5}
-                fill={n.companyStatus === "dissolved" ? "#dc2626" : "#059669"}
-              />
-            )}
+                {/* Director: amber count badge (top-right) */}
+                {n.kind === "director" && (n.totalOther ?? 0) > 0 && (
+                  <>
+                    <circle cx={n.x + 15} cy={n.y - 15} r={9} fill="#d97706" />
+                    <text
+                      x={n.x + 15} y={n.y - 11.5}
+                      textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {n.totalOther}
+                    </text>
+                  </>
+                )}
 
-            {/* Centre label */}
-            {n.kind === "centre" && (
-              <text
-                x={n.x} y={n.y + n.r + 16}
-                textAnchor="middle" fontSize="11" fontWeight="700" fill="#4f46e5"
-                style={{ pointerEvents: "none" }}
-              >
-                {trunc(n.label, 28)}
-              </text>
-            )}
+                {/* Company node: status dot */}
+                {n.kind === "company" && (
+                  <circle
+                    cx={n.x + 9} cy={n.y - 9} r={3.5}
+                    fill={n.companyStatus === "dissolved" ? "#dc2626" : "#059669"}
+                  />
+                )}
 
-            {/* Director label */}
-            {n.kind === "director" && (
-              <text
-                x={n.x} y={n.y > cy + 50 ? n.y - n.r - 6 : n.y + n.r + 13}
-                textAnchor="middle" fontSize="9" fontWeight="600"
-                fill={n.expandable ? "#334155" : "#94a3b8"}
-                style={{ pointerEvents: "none" }}
-              >
-                {trunc(n.label, 20)}
-              </text>
-            )}
+                {/* Centre label */}
+                {n.kind === "centre" && (
+                  <text
+                    x={n.x} y={n.y + n.r + 16}
+                    textAnchor="middle" fontSize="11" fontWeight="700" fill="#4f46e5"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {trunc(n.label, 28)}
+                  </text>
+                )}
 
-            {/* Company label (truncated name) */}
-            {n.kind === "company" && (
-              <text
-                x={n.x} y={n.y + n.r + 11}
-                textAnchor="middle" fontSize="8" fontWeight="500" fill="#64748b"
-                style={{ pointerEvents: "none" }}
-              >
-                {trunc(n.label, 18)}
-              </text>
-            )}
+                {/* Director label */}
+                {n.kind === "director" && (
+                  <text
+                    x={n.x} y={n.y > cy + 50 ? n.y - n.r - 6 : n.y + n.r + 13}
+                    textAnchor="middle" fontSize="9" fontWeight="600"
+                    fill={n.expandable ? "#334155" : "#94a3b8"}
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {trunc(n.label, 20)}
+                  </text>
+                )}
+
+                {/* Company label (truncated name) */}
+                {n.kind === "company" && (
+                  <text
+                    x={n.x} y={n.y + n.r + 11}
+                    textAnchor="middle" fontSize="8" fontWeight="500" fill="#64748b"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {trunc(n.label, 18)}
+                  </text>
+                )}
+              </g>
+            ))}
           </g>
-        ))}
-      </svg>
+        </svg>
 
-      {/* Info panel — top-left */}
-      {infoDir && (
-        <div
-          style={{
-            position: "absolute", top: "10px", left: "10px",
-            backgroundColor: "#fff", border: "1px solid #e2e8f0",
-            borderRadius: "8px", padding: "10px 14px",
-            fontSize: "11px", lineHeight: "1.6",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-            maxWidth: "220px", zIndex: 10,
-          }}
-        >
-          <div style={{ fontWeight: "700", fontSize: "12px", color: "#0f172a", marginBottom: "2px" }}>
-            {infoDir.name}
-          </div>
-          <div style={{ color: "#64748b", textTransform: "capitalize" }}>{infoDir.role}</div>
-          <div style={{ color: "#64748b" }}>Appointed: {infoDir.appointed}</div>
-          <div style={{ color: "#334155", fontWeight: "600", marginTop: "4px" }}>
-            {infoDir.otherCount} other directorship{infoDir.otherCount !== 1 ? "s" : ""}
-          </div>
+        {/* Reset view button */}
+        {(pan.x !== 0 || pan.y !== 0) && (
           <button
-            onClick={() => setInfoDir(null)}
+            onClick={() => setPan({ x: 0, y: 0 })}
             style={{
-              position: "absolute", top: "6px", right: "8px",
-              background: "none", border: "none", cursor: "pointer",
-              fontSize: "14px", color: "#94a3b8", lineHeight: "1",
+              position: "absolute", bottom: "10px", right: "10px",
+              padding: "4px 10px", borderRadius: "6px",
+              border: "1px solid #e2e8f0", backgroundColor: "#fff",
+              fontSize: "11px", fontWeight: "500", color: "#64748b",
+              cursor: "pointer", zIndex: 10,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
             }}
           >
-            x
+            Reset view
           </button>
-        </div>
-      )}
+        )}
 
-      {/* Tooltip — persists when hovering onto it */}
-      {hoveredNode && (
-        <div
-          onMouseEnter={cancelHide}
-          onMouseLeave={() => setHoveredNode(null)}
-          style={{
-            position: "absolute",
-            left: Math.min(hoveredNode.x + 18, width - 230),
-            top: Math.max(hoveredNode.y - 50, 4),
-            backgroundColor: "#0f172a", color: "#fff",
-            padding: "10px 14px", borderRadius: "8px",
-            fontSize: "11px", lineHeight: "1.6",
-            zIndex: 20, maxWidth: "220px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          }}
-        >
-          <div style={{ fontWeight: "600", fontSize: "12px", marginBottom: "3px" }}>
-            {hoveredNode.name}
-          </div>
-          {hoveredNode.role && (
-            <div style={{ color: "#94a3b8", textTransform: "capitalize" }}>{hoveredNode.role}</div>
-          )}
-          {hoveredNode.date && (
-            <div style={{ color: "#94a3b8" }}>Appointed: {hoveredNode.date}</div>
-          )}
-          {hoveredNode.status && (
-            <div style={{
-              color: hoveredNode.status === "dissolved" ? "#fca5a5" : "#6ee7b7",
-              textTransform: "capitalize",
-            }}>
-              {hoveredNode.status}
+        {/* Info panel — top-left */}
+        {infoDir && (
+          <div
+            style={{
+              position: "absolute", top: "10px", left: "10px",
+              backgroundColor: "#fff", border: "1px solid #e2e8f0",
+              borderRadius: "8px", padding: "10px 14px",
+              fontSize: "11px", lineHeight: "1.6",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              maxWidth: "220px", zIndex: 10,
+            }}
+          >
+            <div style={{ fontWeight: "700", fontSize: "12px", color: "#0f172a", marginBottom: "2px" }}>
+              {infoDir.name}
             </div>
-          )}
-          {hoveredNode.kind === "company" && hoveredNode.companyNum && (
-            <a
-              href={`/company/${hoveredNode.companyNum}`}
+            <div style={{ color: "#64748b", textTransform: "capitalize" }}>{infoDir.role}</div>
+            <div style={{ color: "#64748b" }}>Appointed: {infoDir.appointed}</div>
+            <div style={{ color: "#334155", fontWeight: "600", marginTop: "4px" }}>
+              {infoDir.otherCount} other directorship{infoDir.otherCount !== 1 ? "s" : ""}
+            </div>
+            <button
+              onClick={() => setInfoDir(null)}
               style={{
-                display: "inline-block", marginTop: "6px",
-                color: "#818cf8", fontWeight: "600", fontSize: "11px",
-                textDecoration: "none",
+                position: "absolute", top: "6px", right: "8px",
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: "14px", color: "#94a3b8", lineHeight: "1",
               }}
             >
-              View company &rarr;
-            </a>
-          )}
-        </div>
-      )}
-    </div>
+              x
+            </button>
+          </div>
+        )}
+
+        {/* Tooltip — persists when hovering onto it */}
+        {hoveredNode && (
+          <div
+            onMouseEnter={cancelHide}
+            onMouseLeave={() => setHoveredNode(null)}
+            style={{
+              position: "absolute",
+              left: Math.min(hoveredNode.x + pan.x + 18, width - 230),
+              top: Math.max(hoveredNode.y + pan.y - 50, 4),
+              backgroundColor: "#0f172a", color: "#fff",
+              padding: "10px 14px", borderRadius: "8px",
+              fontSize: "11px", lineHeight: "1.6",
+              zIndex: 20, maxWidth: "220px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div style={{ fontWeight: "600", fontSize: "12px", marginBottom: "3px" }}>
+              {hoveredNode.name}
+            </div>
+            {hoveredNode.role && (
+              <div style={{ color: "#94a3b8", textTransform: "capitalize" }}>{hoveredNode.role}</div>
+            )}
+            {hoveredNode.date && (
+              <div style={{ color: "#94a3b8" }}>Appointed: {hoveredNode.date}</div>
+            )}
+            {hoveredNode.status && (
+              <div style={{
+                color: hoveredNode.status === "dissolved" ? "#fca5a5" : "#6ee7b7",
+                textTransform: "capitalize",
+              }}>
+                {hoveredNode.status}
+              </div>
+            )}
+            {hoveredNode.kind === "company" && hoveredNode.companyNum && (
+              <a
+                href={`/company/${hoveredNode.companyNum}`}
+                style={{
+                  display: "inline-block", marginTop: "6px",
+                  color: "#818cf8", fontWeight: "600", fontSize: "11px",
+                  textDecoration: "none",
+                }}
+              >
+                View company &rarr;
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+      <div style={{ textAlign: "center", padding: "6px 0 2px", fontSize: "11px", color: "#94a3b8" }}>
+        Drag to explore
+      </div>
+    </>
   );
 }
 
