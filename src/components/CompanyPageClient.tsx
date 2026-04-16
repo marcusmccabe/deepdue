@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
@@ -131,6 +131,245 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status || "unknown"}
     </span>
+  );
+}
+
+// ── Director Network Graph ────────────────────────────────────────────────────
+
+function DirectorNetworkGraph({
+  company,
+  officers,
+  networkData,
+}: {
+  company: any;
+  officers: any[];
+  networkData: Record<string, any[]>;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(600);
+  const [hovered, setHovered] = useState<{
+    x: number; y: number; name: string; role?: string; date?: string;
+  } | null>(null);
+  const [selectedDir, setSelectedDir] = useState<string | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w && w > 0) setWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const HEIGHT = 420;
+  const cx = width / 2;
+  const cy = HEIGHT / 2;
+  const R1 = Math.min(width * 0.2, 120);
+  const R2 = Math.min(width * 0.12, 70);
+
+  type GNode = {
+    id: string; x: number; y: number; r: number;
+    label: string; fill: string; stroke?: string; strokeDash?: string;
+    kind: "centre" | "director" | "company";
+    dirName?: string; companyNum?: string; role?: string; date?: string;
+    totalOther?: number;
+  };
+  type GEdge = {
+    x1: number; y1: number; x2: number; y2: number;
+    r1: number; r2: number; dirName?: string;
+  };
+
+  const nodes: GNode[] = [];
+  const edges: GEdge[] = [];
+
+  // Centre node
+  nodes.push({
+    id: "c", x: cx, y: cy, r: 28,
+    label: company.company_name ?? "Company",
+    fill: "#4f46e5", kind: "centre",
+  });
+
+  // Director + company nodes
+  const dirCount = officers.length;
+  officers.forEach((off: any, i: number) => {
+    const angle = (2 * Math.PI * i) / Math.max(dirCount, 1) - Math.PI / 2;
+    const dx = cx + R1 * Math.cos(angle);
+    const dy = cy + R1 * Math.sin(angle);
+    const dirName = off.name ?? `Officer ${i}`;
+
+    const allAppts = networkData[dirName] ?? [];
+    const other = allAppts.filter(
+      (a: any) => !a.resigned_on && a.appointed_to?.company_number !== company.company_number
+    );
+
+    nodes.push({
+      id: `d${i}`, x: dx, y: dy, r: 18, label: dirName, fill: "#334155",
+      kind: "director", dirName,
+      role: (off.officer_role ?? "officer").replace(/-/g, " "),
+      totalOther: other.length,
+    });
+    edges.push({ x1: cx, y1: cy, x2: dx, y2: dy, r1: 28, r2: 18, dirName });
+
+    const shown = other.slice(0, 6);
+    const count = shown.length;
+    shown.forEach((appt: any, ci: number) => {
+      const fanSpread = Math.min(Math.PI * 0.6, Math.max((count - 1) * 0.4, 0.1));
+      const startA = angle - fanSpread / 2;
+      const step = count > 1 ? fanSpread / (count - 1) : 0;
+      const cAngle = count === 1 ? angle : startA + step * ci;
+      const compX = dx + R2 * Math.cos(cAngle);
+      const compY = dy + R2 * Math.sin(cAngle);
+      const dissolved = appt.appointed_to?.company_status === "dissolved";
+
+      nodes.push({
+        id: `co${i}-${ci}`, x: compX, y: compY, r: 10,
+        label: appt.appointed_to?.company_name ?? "Unknown",
+        fill: dissolved ? "transparent" : "#cbd5e1",
+        stroke: dissolved ? "#cbd5e1" : undefined,
+        strokeDash: dissolved ? "3,2" : undefined,
+        kind: "company", dirName, companyNum: appt.appointed_to?.company_number,
+        date: appt.appointed_on,
+      });
+      edges.push({ x1: dx, y1: dy, x2: compX, y2: compY, r1: 18, r2: 10, dirName });
+    });
+  });
+
+  const trunc = (s: string, max: number) =>
+    s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
+  const lit = (dirName?: string) => !selectedDir || selectedDir === dirName;
+
+  function clipEdge(e: GEdge) {
+    const ddx = e.x2 - e.x1;
+    const ddy = e.y2 - e.y1;
+    const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+    if (dist < 1) return { ax: e.x1, ay: e.y1, bx: e.x2, by: e.y2 };
+    const nx = ddx / dist;
+    const ny = ddy / dist;
+    return {
+      ax: e.x1 + nx * e.r1, ay: e.y1 + ny * e.r1,
+      bx: e.x2 - nx * e.r2, by: e.y2 - ny * e.r2,
+    };
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ position: "relative", width: "100%", height: HEIGHT, overflow: "hidden" }}
+      onClick={() => setSelectedDir(null)}
+    >
+      <svg width={width} height={HEIGHT} style={{ display: "block" }}>
+        {/* Edges */}
+        {edges.map((e, i) => {
+          const { ax, ay, bx, by } = clipEdge(e);
+          return (
+            <line
+              key={`e${i}`} x1={ax} y1={ay} x2={bx} y2={by}
+              stroke="#e2e8f0" strokeWidth={1.5}
+              style={{ opacity: lit(e.dirName) ? 1 : 0.12, transition: "opacity 0.2s" }}
+            />
+          );
+        })}
+
+        {/* Nodes */}
+        {nodes.map((n) => {
+          const dim = !lit(n.dirName) && n.kind !== "centre";
+          return (
+            <g
+              key={n.id}
+              style={{
+                cursor: n.kind !== "centre" ? "pointer" : "default",
+                opacity: dim ? 0.12 : 1,
+                transition: "opacity 0.2s",
+              }}
+              onMouseEnter={(ev: any) => {
+                const rect = containerRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                setHovered({
+                  x: ev.clientX - rect.left, y: ev.clientY - rect.top,
+                  name: n.label, role: n.role,
+                  date: n.date ? fmtDate(n.date) : undefined,
+                });
+              }}
+              onMouseLeave={() => setHovered(null)}
+              onClick={(ev: any) => {
+                ev.stopPropagation();
+                if (n.kind === "company" && n.companyNum) {
+                  window.location.href = `/company/${n.companyNum}`;
+                } else if (n.kind === "director") {
+                  setSelectedDir(selectedDir === n.dirName ? null : n.dirName ?? null);
+                }
+              }}
+            >
+              <circle
+                cx={n.x} cy={n.y} r={n.r} fill={n.fill}
+                stroke={n.stroke ?? "none"} strokeWidth={n.stroke ? 1.5 : 0}
+                strokeDasharray={n.strokeDash ?? "none"}
+              />
+              {/* Badge for >5 other appointments */}
+              {n.kind === "director" && (n.totalOther ?? 0) > 5 && (
+                <>
+                  <circle cx={n.x + 13} cy={n.y - 13} r={8} fill="#d97706" />
+                  <text
+                    x={n.x + 13} y={n.y - 9.5}
+                    textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff"
+                  >
+                    {n.totalOther}
+                  </text>
+                </>
+              )}
+              {/* Centre label */}
+              {n.kind === "centre" && (
+                <text
+                  x={n.x} y={n.y + n.r + 14}
+                  textAnchor="middle" fontSize="11" fontWeight="700" fill="#4f46e5"
+                >
+                  {trunc(n.label, 28)}
+                </text>
+              )}
+              {/* Director label */}
+              {n.kind === "director" && (
+                <text
+                  x={n.x} y={n.y > cy + 40 ? n.y - n.r - 5 : n.y + n.r + 12}
+                  textAnchor="middle" fontSize="9" fontWeight="600" fill="#334155"
+                >
+                  {trunc(n.label, 20)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Tooltip */}
+      {hovered && (
+        <div
+          style={{
+            position: "absolute",
+            left: Math.min(hovered.x + 12, width - 200),
+            top: Math.max(hovered.y - 40, 4),
+            backgroundColor: "#0f172a", color: "#fff",
+            padding: "8px 12px", borderRadius: "6px",
+            fontSize: "11px", lineHeight: "1.5",
+            pointerEvents: "none", zIndex: 10,
+            maxWidth: "200px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          }}
+        >
+          <div style={{ fontWeight: "600", marginBottom: hovered.role || hovered.date ? "2px" : 0 }}>
+            {hovered.name}
+          </div>
+          {hovered.role && (
+            <div style={{ color: "#94a3b8", textTransform: "capitalize" }}>{hovered.role}</div>
+          )}
+          {hovered.date && (
+            <div style={{ color: "#94a3b8" }}>Appointed: {hovered.date}</div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -492,70 +731,25 @@ export default function CompanyPageClient({
                   </span>
                 </div>
                 {networkLoading ? (
-                  <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: "14px" }}>
-                    {[0, 1, 2].map((k) => (
-                      <div key={k} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <div style={{ width: "40%", height: "14px", backgroundColor: "#f1f5f9", borderRadius: "4px" }} />
-                        <div style={{ width: "70%", height: "12px", backgroundColor: "#f8fafc", borderRadius: "4px" }} />
-                        <div style={{ width: "55%", height: "12px", backgroundColor: "#f8fafc", borderRadius: "4px" }} />
+                  <div style={{ height: "420px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+                      <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#f1f5f9" }} />
+                      <div style={{ display: "flex", gap: "40px" }}>
+                        {[0, 1, 2].map((k) => (
+                          <div key={k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                            <div style={{ width: "36px", height: "36px", borderRadius: "50%", backgroundColor: "#f1f5f9" }} />
+                            <div style={{ width: "50px", height: "8px", borderRadius: "4px", backgroundColor: "#f8fafc" }} />
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
                 ) : officers.length === 0 ? (
                   <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
                     No officers found
                   </div>
                 ) : (
-                  <div>
-                    {officers.map((officer: any, oi: number) => {
-                      const allAppts = networkData[officer.name] ?? [];
-                      const otherActive = allAppts.filter(
-                        (a: any) => !a.resigned_on && a.appointed_to?.company_number !== company.company_number
-                      );
-                      return (
-                        <div
-                          key={`${officer.name}-${oi}`}
-                          style={{
-                            padding: "14px 18px",
-                            borderBottom: oi < officers.length - 1 ? "1px solid #f1f5f9" : "none",
-                          }}
-                        >
-                          <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "2px" }}>
-                            {officer.name}
-                          </div>
-                          <div style={{ fontSize: "12px", color: "#94a3b8", textTransform: "capitalize", marginBottom: "8px" }}>
-                            {(officer.officer_role ?? "officer").replace(/-/g, " ")}
-                          </div>
-                          {otherActive.length === 0 ? (
-                            <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                              No other directorships found
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                              {otherActive.slice(0, 5).map((appt: any, ai: number) => (
-                                <div key={ai} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-                                  <a
-                                    href={`/company/${appt.appointed_to?.company_number}`}
-                                    style={{ fontSize: "12px", fontWeight: "500", color: "#4f46e5", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}
-                                  >
-                                    {appt.appointed_to?.company_name ?? "Unknown"}
-                                  </a>
-                                  <span style={{ fontSize: "11px", color: "#94a3b8", flexShrink: 0 }}>
-                                    {fmtDate(appt.appointed_on)}
-                                  </span>
-                                </div>
-                              ))}
-                              {otherActive.length > 5 && (
-                                <div style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "500", marginTop: "2px" }}>
-                                  +{otherActive.length - 5} more companies
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <DirectorNetworkGraph company={company} officers={officers} networkData={networkData} />
                 )}
               </div>
 
