@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   priceId: string
@@ -9,12 +10,17 @@ interface Props {
   featured?: boolean
 }
 
-export default function PricingCheckoutButton({ priceId, userId, email, featured }: Props) {
+export default function PricingCheckoutButton({ priceId, featured }: Props) {
   const [loading, setLoading] = useState(false)
 
   async function handleClick() {
     setLoading(true)
     try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const email = session?.user?.email ?? ''
+      const userId = session?.user?.id ?? ''
+
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
