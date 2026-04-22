@@ -22,23 +22,24 @@ function StatusPill({ status }: { status: string }) {
     <span
       style={{
         fontSize: "10px",
-        fontWeight: "600",
-        color: active ? "#059669" : dissolved ? "#dc2626" : "#94a3b8",
-        backgroundColor: active
-          ? "rgba(5,150,105,0.08)"
-          : dissolved
-          ? "rgba(220,38,38,0.08)"
-          : "rgba(148,163,184,0.12)",
+        fontWeight: "500",
+        color: active ? "#15803d" : dissolved ? "#b91c1c" : "#4b5563",
+        backgroundColor: active ? "#dcfce7" : dissolved ? "#fee2e2" : "#f3f4f6",
         padding: "2px 7px",
         borderRadius: "100px",
         textTransform: "capitalize",
         marginLeft: "8px",
         flexShrink: 0,
+        whiteSpace: "nowrap",
       }}
     >
       {status || "unknown"}
     </span>
   );
+}
+
+function toTitleCase(str: string) {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function SearchBar({ initialQuery = "" }: Props) {
@@ -247,20 +248,28 @@ export default function SearchBar({ initialQuery = "" }: Props) {
                   backgroundColor: "transparent",
                 }}
               >
-                <span
+                <div
                   style={{
-                    display: "block",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    color: "#0f172a",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    display: "flex",
+                    alignItems: "center",
                     marginBottom: "2px",
                   }}
                 >
-                  {r.title}
-                </span>
+                  <span
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      color: "#0f172a",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      flex: 1,
+                    }}
+                  >
+                    {toTitleCase(r.title)}
+                  </span>
+                  <StatusPill status={r.company_status} />
+                </div>
                 <span
                   style={{
                     display: "block",

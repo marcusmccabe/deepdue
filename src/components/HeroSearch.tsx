@@ -10,6 +10,33 @@ interface SearchResult {
   address_snippet: string;
 }
 
+function StatusPill({ status }: { status: string }) {
+  const active = status === "active";
+  const dissolved = status === "dissolved";
+  return (
+    <span
+      style={{
+        fontSize: "10px",
+        fontWeight: "500",
+        color: active ? "#15803d" : dissolved ? "#b91c1c" : "#4b5563",
+        backgroundColor: active ? "#dcfce7" : dissolved ? "#fee2e2" : "#f3f4f6",
+        padding: "2px 7px",
+        borderRadius: "100px",
+        textTransform: "capitalize",
+        marginLeft: "8px",
+        flexShrink: 0,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {status || "unknown"}
+    </span>
+  );
+}
+
+function toTitleCase(str: string) {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function HeroSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -198,17 +225,28 @@ export default function HeroSearch() {
                 textAlign: "left",
               }}
             >
-              <span
+              <div
                 style={{
-                  display: "block",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  color: "#0f172a",
+                  display: "flex",
+                  alignItems: "center",
                   marginBottom: "2px",
                 }}
               >
-                {r.title}
-              </span>
+                <span
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    color: "#0f172a",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                  }}
+                >
+                  {toTitleCase(r.title)}
+                </span>
+                <StatusPill status={r.company_status} />
+              </div>
               <span
                 style={{
                   display: "block",
