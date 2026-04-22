@@ -1,4 +1,6 @@
 import SearchToggleBar from "@/components/SearchToggleBar";
+import { UserMenu } from "@/components/UserMenu";
+import { createClient } from "@/lib/supabase/server";
 
 const NAV_ITEMS = [
   { icon: "🔍", label: "Search", active: false },
@@ -143,7 +145,12 @@ function StatusBadge({
   );
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <div
       style={{
@@ -226,14 +233,7 @@ export default function DashboardPage() {
         </nav>
 
         {/* User row */}
-        <div style={{ padding: "16px 20px", borderTop: "1px solid #e2e8f0" }}>
-          <div style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a" }}>
-            Marcus McCabe
-          </div>
-          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
-            Pro plan
-          </div>
-        </div>
+        <UserMenu email={user?.email} />
       </aside>
 
       {/* ── Main content ── */}
