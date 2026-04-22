@@ -81,27 +81,31 @@ export default function LoginPage() {
     setLoading(true);
     const supabase = createClient();
 
-    if (mode === "signup") {
-      const { error: err } = await supabase.auth.signUp({ email, password });
-      if (err) {
-        setError(err.message);
+    try {
+      if (mode === "signup") {
+        console.log('[signup] attempting signup for', email);
+        const { data, error: err } = await supabase.auth.signUp({ email, password });
+        console.log('[signup] response:', JSON.stringify(data), JSON.stringify(err));
+        if (err) {
+          setError(err.message);
+        } else {
+          setOtpCode("");
+          setMode("verify");
+        }
       } else {
-        setOtpCode("");
-        setMode("verify");
+        const { error: err } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (err) {
+          setError(err.message);
+        } else {
+          router.push("/dashboard");
+        }
       }
-    } else {
-      const { error: err } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (err) {
-        setError(err.message);
-      } else {
-        router.push("/dashboard");
-      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function handleVerify(e: React.FormEvent) {
@@ -110,11 +114,13 @@ export default function LoginPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: err } = await supabase.auth.verifyOtp({
+    console.log('[verify] calling verifyOtp with', { email, token: otpCode, type: 'email' });
+    const { data, error: err } = await supabase.auth.verifyOtp({
       email,
       token: otpCode,
       type: "email",
     });
+    console.log('[verify] response:', JSON.stringify(data), JSON.stringify(err));
 
     if (err) {
       setError("Invalid or expired code — please try again.");
