@@ -114,11 +114,13 @@ export default function LoginPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: err } = await supabase.auth.verifyOtp({
+    console.log('[verify] calling verifyOtp with', { email, token: otpCode, type: 'email' });
+    const { data, error: err } = await supabase.auth.verifyOtp({
       email,
       token: otpCode,
       type: "email",
     });
+    console.log('[verify] response:', JSON.stringify(data), JSON.stringify(err));
 
     if (err) {
       setError("Invalid or expired code — please try again.");
