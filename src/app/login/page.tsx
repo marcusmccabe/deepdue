@@ -124,8 +124,14 @@ export default function LoginPage() {
 
     if (err) {
       setError("Invalid or expired code — please try again.");
-    } else {
-      router.push("/dashboard");
+      setLoading(false);
+      return;
+    }
+
+    if (data?.session) {
+      console.log('[verify] session exists, redirecting...')
+      window.location.replace('/dashboard')
+      return
     }
 
     setLoading(false);
