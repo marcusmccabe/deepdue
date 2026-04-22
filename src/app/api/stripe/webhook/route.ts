@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 function planFromPriceId(priceId: string): string {
   if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return 'starter'
@@ -16,6 +11,12 @@ function planFromPriceId(priceId: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const stripe = getStripe()
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')!
 
