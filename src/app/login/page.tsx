@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type Mode = "signin" | "signup" | "verify";
+
 const inputStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
@@ -51,13 +53,13 @@ function GoogleIcon() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [signUpSent, setSignUpSent] = useState(false);
 
   async function signInWithGoogle() {
     const supabase = createClient();
@@ -84,7 +86,8 @@ export default function LoginPage() {
       if (err) {
         setError(err.message);
       } else {
-        setSignUpSent(true);
+        setOtpCode("");
+        setMode("verify");
       }
     } else {
       const { error: err } = await supabase.auth.signInWithPassword({
@@ -101,14 +104,59 @@ export default function LoginPage() {
     setLoading(false);
   }
 
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.verifyOtp({
+      email,
+      token: otpCode,
+      type: "email",
+    });
+
+    if (err) {
+      setError("Invalid or expired code — please try again.");
+    } else {
+      router.push("/dashboard");
+    }
+
+    setLoading(false);
+  }
+
+  async function resendCode() {
+    setError("");
+    const supabase = createClient();
+    await supabase.auth.signUp({ email, password });
+  }
+
   function switchMode() {
     setMode((m) => (m === "signin" ? "signup" : "signin"));
     setError("");
-    setSignUpSent(false);
+    setOtpCode("");
     setEmail("");
     setPassword("");
     setConfirmPassword("");
   }
+
+  function backToSignIn() {
+    setMode("signin");
+    setError("");
+    setOtpCode("");
+  }
+
+  const titles: Record<Mode, string> = {
+    signin: "Sign in to DeepDue",
+    signup: "Create your account",
+    verify: "Verify your email",
+  };
+
+  const subtitles: Record<Mode, string> = {
+    signin: "Welcome back. Enter your details to continue.",
+    signup: "Start your free trial — no credit card required.",
+    verify: `We sent a 6-digit code to ${email}`,
+  };
 
   return (
     <div
@@ -150,7 +198,7 @@ export default function LoginPage() {
           <span style={{ color: "#94a3b8", fontSize: "15px" }}>.ai</span>
         </div>
 
-        {/* Page title */}
+        {/* Title */}
         <h1
           style={{
             fontFamily:
@@ -162,7 +210,7 @@ export default function LoginPage() {
             lineHeight: "1.2",
           }}
         >
-          {mode === "signin" ? "Sign in to DeepDue" : "Create your account"}
+          {titles[mode]}
         </h1>
         <p
           style={{
@@ -171,28 +219,77 @@ export default function LoginPage() {
             marginBottom: "28px",
           }}
         >
-          {mode === "signin"
-            ? "Welcome back. Enter your details to continue."
-            : "Start your free trial — no credit card required."}
+          {subtitles[mode]}
         </p>
 
-        {/* ── Sign-up success state ── */}
-        {signUpSent ? (
-          <div
-            style={{
-              padding: "16px",
-              backgroundColor: "rgba(5,150,105,0.07)",
-              border: "1px solid rgba(5,150,105,0.2)",
-              borderRadius: "8px",
-              fontSize: "14px",
-              color: "#065f46",
-              lineHeight: "1.55",
-              marginBottom: "20px",
-            }}
-          >
-            <strong>Check your email.</strong> We sent a confirmation link to{" "}
-            <strong>{email}</strong>. Click it to activate your account.
-          </div>
+        {/* ── Verify mode ── */}
+        {mode === "verify" ? (
+          <form onSubmit={handleVerify}>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="000000"
+              value={otpCode}
+              onChange={(e) =>
+                setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              autoFocus
+              required
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "14px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                fontSize: "24px",
+                letterSpacing: "0.3em",
+                color: "#0f172a",
+                marginBottom: "12px",
+                outline: "none",
+                backgroundColor: "#ffffff",
+                fontFamily: "inherit",
+                boxSizing: "border-box",
+                textAlign: "center",
+              }}
+            />
+
+            <button
+              type="submit"
+              disabled={loading || otpCode.length < 6}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "11px 16px",
+                backgroundColor: "#4f46e5",
+                borderRadius: "8px",
+                border: "none",
+                color: "#ffffff",
+                fontSize: "14px",
+                fontWeight: "600",
+                cursor: loading || otpCode.length < 6 ? "default" : "pointer",
+                fontFamily: "inherit",
+                marginBottom: "12px",
+                opacity: loading || otpCode.length < 6 ? 0.75 : 1,
+              }}
+            >
+              {loading ? "Verifying…" : "Verify"}
+            </button>
+
+            {error && (
+              <p
+                style={{
+                  fontSize: "13px",
+                  color: "#dc2626",
+                  lineHeight: "1.4",
+                  marginBottom: "4px",
+                }}
+              >
+                {error}
+              </p>
+            )}
+          </form>
         ) : (
           <>
             {/* Google OAuth button */}
@@ -317,33 +414,72 @@ export default function LoginPage() {
           </>
         )}
 
-        {/* Mode toggle */}
+        {/* Bottom links */}
         <p
           style={{
             textAlign: "center",
             fontSize: "13px",
             color: "#94a3b8",
-            marginTop: signUpSent ? "0" : "8px",
+            marginTop: "16px",
           }}
         >
-          {mode === "signin"
-            ? "Don't have an account? "
-            : "Already have an account? "}
-          <button
-            onClick={switchMode}
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "#4f46e5",
-              fontWeight: "600",
-              fontSize: "13px",
-              fontFamily: "inherit",
-            }}
-          >
-            {mode === "signin" ? "Sign up" : "Sign in"}
-          </button>
+          {mode === "verify" ? (
+            <>
+              Didn&apos;t receive it?{" "}
+              <button
+                onClick={resendCode}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "#475569",
+                  fontWeight: "500",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                }}
+              >
+                Resend code
+              </button>
+              {" · "}
+              <button
+                onClick={backToSignIn}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "#4f46e5",
+                  fontWeight: "600",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                }}
+              >
+                Back to sign in
+              </button>
+            </>
+          ) : (
+            <>
+              {mode === "signin"
+                ? "Don't have an account? "
+                : "Already have an account? "}
+              <button
+                onClick={switchMode}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "#4f46e5",
+                  fontWeight: "600",
+                  fontSize: "13px",
+                  fontFamily: "inherit",
+                }}
+              >
+                {mode === "signin" ? "Sign up" : "Sign in"}
+              </button>
+            </>
+          )}
         </p>
       </div>
     </div>
