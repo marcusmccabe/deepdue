@@ -1,6 +1,18 @@
-import Link from "next/link";
+"use client";
+
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  async function signInWithGoogle() {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  }
+
   return (
     <div
       style={{
@@ -116,6 +128,7 @@ export default function LoginPage() {
 
           {/* Google Button */}
           <button
+            onClick={signInWithGoogle}
             style={{
               display: "flex",
               alignItems: "center",
@@ -130,7 +143,8 @@ export default function LoginPage() {
               color: "#0f172a",
               fontWeight: "500",
               cursor: "pointer",
-              marginBottom: "20px",
+              marginBottom: "28px",
+              fontFamily: "inherit",
             }}
           >
             <svg
@@ -161,87 +175,6 @@ export default function LoginPage() {
             Continue with Google
           </button>
 
-          {/* Divider */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "20px",
-            }}
-          >
-            <div
-              style={{ flex: 1, height: "1px", backgroundColor: "#e2e8f0" }}
-            />
-            <span
-              style={{
-                fontSize: "12px",
-                color: "#94a3b8",
-                whiteSpace: "nowrap",
-              }}
-            >
-              or email
-            </span>
-            <div
-              style={{ flex: 1, height: "1px", backgroundColor: "#e2e8f0" }}
-            />
-          </div>
-
-          {/* Email */}
-          <input
-            type="email"
-            placeholder="Email address"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "11px 14px",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              fontSize: "14px",
-              color: "#0f172a",
-              marginBottom: "12px",
-              outline: "none",
-              backgroundColor: "#ffffff",
-            }}
-          />
-
-          {/* Password */}
-          <input
-            type="password"
-            placeholder="Password"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "11px 14px",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              fontSize: "14px",
-              color: "#0f172a",
-              marginBottom: "16px",
-              outline: "none",
-              backgroundColor: "#ffffff",
-            }}
-          />
-
-          {/* Sign In Button */}
-          <Link
-            href="/dashboard"
-            style={{
-              display: "block",
-              width: "100%",
-              padding: "11px 16px",
-              backgroundColor: "#4f46e5",
-              borderRadius: "8px",
-              color: "#ffffff",
-              fontSize: "14px",
-              fontWeight: "600",
-              textAlign: "center",
-              marginBottom: "20px",
-            }}
-          >
-            Sign in
-          </Link>
-
           {/* Footer link */}
           <p
             style={{
@@ -250,13 +183,8 @@ export default function LoginPage() {
               color: "#94a3b8",
             }}
           >
-            No account?{" "}
-            <Link
-              href="/login"
-              style={{ color: "#4f46e5", fontWeight: "500" }}
-            >
-              Start free trial
-            </Link>
+            By continuing, you agree to our{" "}
+            <span style={{ color: "#475569" }}>Terms of Service</span>
           </p>
         </div>
       </div>
