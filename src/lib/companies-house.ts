@@ -34,7 +34,7 @@ export interface CHAddress {
 }
 
 export interface CHSearchItem {
-  company_name: string;
+  title: string;
   company_number: string;
   company_status: string;
   company_type?: string;

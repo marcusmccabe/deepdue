@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 interface SearchResult {
-  company_name: string;
+  title: string;
   company_number: string;
   company_status: string;
   address_snippet: string;
@@ -259,7 +259,7 @@ export default function SearchBar({ initialQuery = "" }: Props) {
                     marginBottom: "2px",
                   }}
                 >
-                  {r.company_name}
+                  {r.title}
                 </span>
                 <span
                   style={{
