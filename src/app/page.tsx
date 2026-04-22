@@ -50,18 +50,22 @@ export default function LandingPage() {
           <div
             style={{ display: "flex", gap: "32px", alignItems: "center" }}
           >
-            {["Product", "Pricing", "Docs"].map((link) => (
-              <a
-                key={link}
-                href="#"
+            {[
+              { label: "Product", href: "#" },
+              { label: "Pricing", href: "/pricing" },
+              { label: "Docs", href: "#" },
+            ].map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
                 style={{
                   color: "#475569",
                   fontSize: "14px",
                   fontWeight: "500",
                 }}
               >
-                {link}
-              </a>
+                {label}
+              </Link>
             ))}
           </div>
 

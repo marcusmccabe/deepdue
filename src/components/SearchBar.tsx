@@ -247,55 +247,45 @@ export default function SearchBar({ initialQuery = "" }: Props) {
                   backgroundColor: "transparent",
                 }}
               >
-                <div
+                <span
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "3px",
+                    display: "block",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    color: "#0f172a",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    marginBottom: "2px",
                   }}
                 >
+                  {r.company_name}
+                </span>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: "11px",
+                    color: "#475569",
+                    fontFamily: "'Courier New', monospace",
+                    marginBottom: "2px",
+                  }}
+                >
+                  {r.company_number}
+                </span>
+                {r.address_snippet && (
                   <span
                     style={{
-                      fontSize: "13px",
-                      fontWeight: "600",
-                      color: "#0f172a",
+                      display: "block",
+                      fontSize: "11px",
+                      color: "#94a3b8",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
-                      maxWidth: "260px",
                     }}
                   >
-                    {r.company_name}
+                    {r.address_snippet}
                   </span>
-                  <StatusPill status={r.company_status} />
-                </div>
-
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "#475569",
-                      fontFamily: "'Courier New', monospace",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {r.company_number}
-                  </span>
-                  {r.address_snippet && (
-                    <span
-                      style={{
-                        fontSize: "11px",
-                        color: "#94a3b8",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      · {r.address_snippet}
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             ))
           ) : (

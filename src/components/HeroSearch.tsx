@@ -198,66 +198,42 @@ export default function HeroSearch() {
                 textAlign: "left",
               }}
             >
-              <div
+              <span
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "3px",
+                  display: "block",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: "#0f172a",
+                  marginBottom: "2px",
                 }}
               >
+                {r.company_name}
+              </span>
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "12px",
+                  color: "#475569",
+                  fontFamily: "'Courier New', monospace",
+                  marginBottom: "2px",
+                }}
+              >
+                {r.company_number}
+              </span>
+              {r.address_snippet && (
                 <span
                   style={{
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    color: "#0f172a",
+                    display: "block",
+                    fontSize: "11px",
+                    color: "#94a3b8",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {r.company_name}
+                  {r.address_snippet}
                 </span>
-                <span
-                  style={{
-                    fontSize: "10px",
-                    fontWeight: "600",
-                    color: r.company_status === "active" ? "#059669" : "#dc2626",
-                    backgroundColor:
-                      r.company_status === "active"
-                        ? "rgba(5,150,105,0.08)"
-                        : "rgba(220,38,38,0.08)",
-                    padding: "2px 7px",
-                    borderRadius: "100px",
-                    textTransform: "capitalize",
-                    marginLeft: "8px",
-                    flexShrink: 0,
-                  }}
-                >
-                  {r.company_status}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <span
-                  style={{
-                    fontSize: "12px",
-                    color: "#475569",
-                    fontFamily: "'Courier New', monospace",
-                  }}
-                >
-                  {r.company_number}
-                </span>
-                {r.address_snippet && (
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      color: "#94a3b8",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    · {r.address_snippet}
-                  </span>
-                )}
-              </div>
+              )}
             </div>
           ))}
         </div>
