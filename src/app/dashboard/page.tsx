@@ -3,12 +3,13 @@ import { UserMenu } from "@/components/UserMenu";
 import { createClient } from "@/lib/supabase/server";
 
 const NAV_ITEMS = [
-  { icon: "🔍", label: "Search", active: false },
-  { icon: "📊", label: "Dashboard", active: true },
-  { icon: "⭐", label: "Watchlist", active: false },
-  { icon: "📄", label: "Reports", active: false },
-  { icon: "🔔", label: "Alerts", active: false },
-  { icon: "⚙️", label: "Settings", active: false },
+  { icon: "🔍", label: "Search", active: false, href: undefined },
+  { icon: "📊", label: "Dashboard", active: true, href: undefined },
+  { icon: "⭐", label: "Watchlist", active: false, href: undefined },
+  { icon: "📄", label: "Reports", active: false, href: undefined },
+  { icon: "🔔", label: "Alerts", active: false, href: undefined },
+  { icon: "💳", label: "Pricing", active: false, href: "/pricing" },
+  { icon: "⚙️", label: "Settings", active: false, href: undefined },
 ];
 
 const STAT_CARDS = [
@@ -194,42 +195,52 @@ export default async function DashboardPage() {
 
         {/* Nav */}
         <nav style={{ flex: 1, paddingTop: "8px" }}>
-          {NAV_ITEMS.map((item) => (
-            <div
-              key={item.label}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "10px 20px",
-                fontSize: "13px",
-                cursor: "pointer",
-                borderLeft: item.active
-                  ? "4px solid #4338ca"
-                  : "4px solid transparent",
-                backgroundColor: item.active
-                  ? "rgba(79,70,229,0.12)"
-                  : "transparent",
-                color: item.active ? "#4338ca" : "#475569",
-                fontWeight: item.active ? "600" : "400",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "15px",
-                  width: "20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  lineHeight: "1",
-                }}
-              >
-                {item.icon}
-              </span>
-              <span>{item.label}</span>
-            </div>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const navStyle = {
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "10px 20px",
+              fontSize: "13px",
+              cursor: "pointer",
+              borderLeft: item.active
+                ? "4px solid #4338ca"
+                : "4px solid transparent",
+              backgroundColor: item.active
+                ? "rgba(79,70,229,0.12)"
+                : "transparent",
+              color: item.active ? "#4338ca" : "#475569",
+              fontWeight: item.active ? "600" : "400",
+              textDecoration: "none",
+            };
+            const inner = (
+              <>
+                <span
+                  style={{
+                    fontSize: "15px",
+                    width: "20px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    lineHeight: "1",
+                  }}
+                >
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+              </>
+            );
+            return item.href ? (
+              <a key={item.label} href={item.href} style={navStyle}>
+                {inner}
+              </a>
+            ) : (
+              <div key={item.label} style={navStyle}>
+                {inner}
+              </div>
+            );
+          })}
         </nav>
 
         {/* User row */}
