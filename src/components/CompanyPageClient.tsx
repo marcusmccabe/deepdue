@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
 import FinancialSnapshotPanel from "@/components/FinancialSnapshotPanel";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -681,6 +682,47 @@ export default function CompanyPageClient({
 }) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
 
+  // ── Watchlist state ─────────────────────────────────────────────────────────
+  type WatchlistState = "checking" | "idle" | "saving" | "done" | "error";
+  const [watchlistState, setWatchlistState] = useState<WatchlistState>("checking");
+
+  useEffect(() => {
+    async function checkWatchlist() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setWatchlistState("idle"); return; }
+      const { data } = await supabase
+        .from("watchlist")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("company_number", company.company_number)
+        .maybeSingle();
+      setWatchlistState(data ? "done" : "idle");
+    }
+    checkWatchlist();
+  }, [company.company_number]);
+
+  async function handleWatchlist() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { window.location.href = "/login"; return; }
+    setWatchlistState("saving");
+    const { error } = await supabase.from("watchlist").insert({
+      user_id: user.id,
+      company_number: company.company_number,
+      company_name: company.company_name,
+      company_status: company.company_status,
+      last_accounts_date: company.accounts?.last_accounts?.made_up_to ?? null,
+      next_accounts_due: company.accounts?.next_accounts?.due_on ?? company.accounts?.next_due ?? null,
+    });
+    if (error) {
+      setWatchlistState("error");
+      setTimeout(() => setWatchlistState("idle"), 3000);
+    } else {
+      setWatchlistState("done");
+    }
+  }
+
   // ── Director network state ──────────────────────────────────────────────────
   const [networkData, setNetworkData] = useState<Record<string, any[]>>({});
   const [networkLoading, setNetworkLoading] = useState(true);
@@ -747,18 +789,40 @@ export default function CompanyPageClient({
 
         <div style={{ display: "flex", gap: "8px" }}>
           <button
+            onClick={watchlistState === "idle" ? handleWatchlist : undefined}
+            disabled={watchlistState !== "idle"}
             style={{
               padding: "8px 14px",
               borderRadius: "8px",
-              border: "1px solid #e2e8f0",
-              backgroundColor: "#ffffff",
-              color: "#475569",
+              border: watchlistState === "error"
+                ? "1px solid rgba(220,38,38,0.4)"
+                : watchlistState === "done"
+                ? "1px solid rgba(5,150,105,0.3)"
+                : "1px solid #e2e8f0",
+              backgroundColor: watchlistState === "done"
+                ? "rgba(5,150,105,0.08)"
+                : watchlistState === "error"
+                ? "rgba(220,38,38,0.08)"
+                : "#ffffff",
+              color: watchlistState === "done"
+                ? "#059669"
+                : watchlistState === "error"
+                ? "#dc2626"
+                : "#475569",
               fontSize: "13px",
-              fontWeight: "500",
-              cursor: "pointer",
+              fontWeight: watchlistState === "done" ? "600" : "500",
+              cursor: watchlistState === "idle" ? "pointer" : "default",
+              opacity: watchlistState === "checking" || watchlistState === "saving" ? 0.55 : 1,
+              transition: "all 0.15s",
             }}
           >
-            + Watchlist
+            {watchlistState === "checking" || watchlistState === "saving"
+              ? "…"
+              : watchlistState === "done"
+              ? "✓ Watchlisted"
+              : watchlistState === "error"
+              ? "Error — retry"
+              : "+ Watchlist"}
           </button>
           <button
             style={{
