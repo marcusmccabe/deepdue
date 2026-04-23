@@ -1,50 +1,70 @@
 /**
- * In-memory analysis cache — server-side only.
+ * Supabase-backed analysis cache — server-side only.
  *
- * Keyed by "v2:{COMPANY_NUMBER}" — the v2 prefix automatically invalidates
- * any v1 cached results from the previous schema version.
- *
- * In a Vercel serverless deployment each function instance has its own
- * Map, so cache hits happen within the same warm instance. For persistent
- * cross-instance caching, swap this for Redis/Upstash.
+ * Reads and writes to the analysis_cache table. Returns null (cache miss) if
+ * the row is missing or older than CACHE_TTL_DAYS.
  */
+import { createClient } from "@supabase/supabase-js";
 import type { AccountsAnalysis } from "./analysis-types";
 
-interface CacheEntry {
-  data: AccountsAnalysis;
-  timestamp: number;
+const CACHE_TTL_DAYS = 90;
+
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
 }
 
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const VERSION = "v3";
+export async function getCachedAnalysis(
+  companyNumber: string
+): Promise<AccountsAnalysis | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
 
-const cache = new Map<string, CacheEntry>();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - CACHE_TTL_DAYS);
 
-function cacheKey(companyNumber: string): string {
-  return `${VERSION}:${companyNumber.toUpperCase()}`;
+  const { data, error } = await supabase
+    .from("analysis_cache")
+    .select("analysis, cached_at")
+    .eq("company_number", companyNumber.toUpperCase())
+    .gt("cached_at", cutoff.toISOString())
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return { ...(data.analysis as AccountsAnalysis), cached: true };
 }
 
-export function getCachedAnalysis(companyNumber: string): AccountsAnalysis | null {
-  const key = cacheKey(companyNumber);
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
-    cache.delete(key);
-    return null;
-  }
-  return { ...entry.data, cached: true };
-}
-
-export function setCachedAnalysis(
+export async function setCachedAnalysis(
   companyNumber: string,
-  data: AccountsAnalysis
-): void {
-  cache.set(cacheKey(companyNumber), {
-    data: { ...data, cached: false },
-    timestamp: Date.now(),
-  });
+  analysis: AccountsAnalysis
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  const { error } = await supabase.from("analysis_cache").upsert(
+    {
+      company_number: companyNumber.toUpperCase(),
+      analysis: { ...analysis, cached: false },
+      accounts_date: analysis.documentDate ?? null,
+      cached_at: new Date().toISOString(),
+    },
+    { onConflict: "company_number" }
+  );
+
+  if (error) {
+    console.error("[analysis-cache] upsert error:", error.message);
+  }
 }
 
-export function clearCachedAnalysis(companyNumber: string): void {
-  cache.delete(cacheKey(companyNumber));
+export async function clearCachedAnalysis(companyNumber: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) return;
+
+  await supabase
+    .from("analysis_cache")
+    .delete()
+    .eq("company_number", companyNumber.toUpperCase());
 }
