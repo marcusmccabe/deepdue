@@ -53,21 +53,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  // Step 2: find first accounts filing
+  // Step 2: find first full accounts filing — skip micro-entity filings (balance-sheet only, no P&L)
   const ACCOUNT_TYPES = new Set(["AA", "AAMD"]);
-  const firstAccounts = filings.find(
-    (f) => ACCOUNT_TYPES.has(f.type ?? "") && f.links?.document_metadata
-  );
+  const aaFilings = filings.filter((f) => ACCOUNT_TYPES.has(f.type ?? "") && f.links?.document_metadata);
+  const skipped = aaFilings.filter((f) => f.description?.toLowerCase().includes("micro-entity"));
+  const firstAccounts = aaFilings.find((f) => !f.description?.toLowerCase().includes("micro-entity"));
+
+  if (skipped.length > 0) {
+    log.push(`Skipped ${skipped.length} micro-entity filing(s): ${skipped.map((f) => f.description ?? "?").join("; ")}`);
+  }
 
   if (!firstAccounts) {
-    log.push("No AA/AAMD filing with document_metadata found");
+    log.push("No full AA/AAMD filing (non-micro-entity) with document_metadata found");
     result.firstFiling = null;
     return NextResponse.json(result);
   }
 
   const periodEnd =
     firstAccounts.description_values?.made_up_date ?? firstAccounts.date ?? "unknown";
-  log.push(`First accounts filing: type=${firstAccounts.type} periodEnd=${periodEnd} description="${firstAccounts.description ?? ""}"`);
+  log.push(`First full accounts filing: type=${firstAccounts.type} periodEnd=${periodEnd} description="${firstAccounts.description ?? ""}"`);
   log.push(`document_metadata URL: ${firstAccounts.links!.document_metadata}`);
 
   result.firstFiling = {
