@@ -156,9 +156,12 @@ function extractConcept(
     while ((m = re.exec(html)) !== null) {
       const [, , attrs, rawContent] = m;
 
-      // Concept name match (any namespace prefix, case-insensitive)
-      const nameM = attrs.match(/\bname="[^:]+:([^"]+)"/i);
-      if (!nameM || nameM[1].toLowerCase() !== conceptLower) continue;
+      // Concept name match — strip namespace prefix (uk-core:, core:, ifrs-full:, bus:, FRS-102:, etc.)
+      // and compare only the local name (part after the last colon), case-insensitively.
+      const nameM = attrs.match(/\bname="([^"]+)"/i);
+      if (!nameM) continue;
+      const localName = nameM[1].split(":").pop() ?? "";
+      if (localName.toLowerCase() !== conceptLower) continue;
 
       // Context filter
       if (ctxRef !== null) {
