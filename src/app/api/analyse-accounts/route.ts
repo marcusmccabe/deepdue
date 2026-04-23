@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── 1. Cache check ────────────────────────────────────────────────────────
-  const cached = getCachedAnalysis(companyNumber);
+  const cached = await getCachedAnalysis(companyNumber);
   if (cached) {
     return NextResponse.json(cached);
   }
@@ -364,6 +364,6 @@ export async function GET(request: NextRequest) {
   }
 
   // ── 7. Cache and return ───────────────────────────────────────────────────
-  setCachedAnalysis(companyNumber, analysis);
+  await setCachedAnalysis(companyNumber, analysis);
   return NextResponse.json(analysis);
 }

@@ -389,9 +389,35 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
   const ao = analysis.auditOpinion;
   const cs = analysis.complianceSignals;
 
+  const cachedBadge = analysis.cached ? (
+    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+      <span
+        style={{
+          padding: "3px 8px",
+          backgroundColor: "rgba(100,116,139,0.10)",
+          color: "#475569",
+          borderRadius: "100px",
+          fontSize: "11px",
+          fontWeight: "600",
+          border: "1px solid rgba(100,116,139,0.25)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Cached ·{" "}
+        {new Date(analysis.analysedAt).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })}
+      </span>
+    </span>
+  ) : (
+    <Pill label="✓ Analysis complete" color="#059669" bg="rgba(5,150,105,0.08)" />
+  );
+
   return (
     <div style={CARD}>
-      <CardHeader badge={<Pill label="✓ Analysis complete" color="#059669" bg="rgba(5,150,105,0.08)" />} />
+      <CardHeader badge={cachedBadge} />
 
       <div
         style={{
