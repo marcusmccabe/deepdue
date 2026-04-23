@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedAnalysis, setCachedAnalysis } from "@/lib/analysis-cache";
 import type { AccountsAnalysis } from "@/lib/analysis-types";
+import { analyseWithGemini } from "@/lib/gemini-analysis";
 
 // Allow up to 60 s for the full pipeline (Vercel Pro; free tier caps at 10 s)
 export const maxDuration = 60;
@@ -250,6 +251,30 @@ export async function GET(request: NextRequest) {
     }
 
     if (!anthropicRes.ok) {
+      if (anthropicRes.status === 400) {
+        console.log(
+          `[analyse-accounts] ${companyNumber}: Anthropic 400 — falling back to Gemini`
+        );
+        try {
+          const geminiAnalysis = await analyseWithGemini(
+            pdfBase64,
+            companyNumber,
+            filing.date
+          );
+          await setCachedAnalysis(companyNumber, geminiAnalysis);
+          return NextResponse.json(geminiAnalysis);
+        } catch (geminiError) {
+          console.error("[analyse-accounts] Gemini fallback failed:", geminiError);
+          return NextResponse.json(
+            {
+              error:
+                "Analysis failed: the document could not be processed by either AI provider. The PDF may be too large or in an unsupported format.",
+            },
+            { status: 502 }
+          );
+        }
+      }
+
       const body = await anthropicRes.text().catch(() => "");
       console.error("[analyse-accounts] Anthropic error:", body);
       return NextResponse.json(

@@ -78,10 +78,11 @@ export interface AccountsAnalysis {
   risksAndWarnings: RisksAndWarnings;
   auditOpinion: AuditOpinion;
   complianceSignals: ComplianceSignals;
-  // Metadata added by our route — not part of Claude's response
+  // Metadata added by our route — not part of the AI response
   analysedAt: string;
   companyNumber: string;
   documentDate?: string;
   cached?: boolean;
   error?: string;
+  provider?: "anthropic" | "gemini";
 }

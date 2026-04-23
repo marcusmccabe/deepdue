@@ -389,7 +389,7 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
   const ao = analysis.auditOpinion;
   const cs = analysis.complianceSignals;
 
-  const cachedBadge = analysis.cached ? (
+  const statusBadge = analysis.cached ? (
     <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
       <span
         style={{
@@ -415,9 +415,23 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
     <Pill label="✓ Analysis complete" color="#059669" bg="rgba(5,150,105,0.08)" />
   );
 
+  const headerBadge =
+    analysis.provider === "gemini" ? (
+      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        {statusBadge}
+        <Pill
+          label="Analysed by Gemini"
+          color="#475569"
+          bg="rgba(100,116,139,0.10)"
+        />
+      </span>
+    ) : (
+      statusBadge
+    );
+
   return (
     <div style={CARD}>
-      <CardHeader badge={cachedBadge} />
+      <CardHeader badge={headerBadge} />
 
       <div
         style={{
