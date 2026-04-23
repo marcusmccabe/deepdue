@@ -5,129 +5,23 @@ import { createClient } from "@/lib/supabase/server";
 const NAV_ITEMS = [
   { icon: "🔍", label: "Search", active: false, href: undefined },
   { icon: "📊", label: "Dashboard", active: true, href: undefined },
-  { icon: "⭐", label: "Watchlist", active: false, href: undefined },
+  { icon: "⭐", label: "Watchlist", active: false, href: "/watchlist" },
   { icon: "📄", label: "Reports", active: false, href: undefined },
-  { icon: "🔔", label: "Alerts", active: false, href: undefined },
+  { icon: "🔔", label: "Alerts", active: false, href: "/alerts" },
   { icon: "💳", label: "Pricing", active: false, href: "/pricing" },
   { icon: "⚙️", label: "Settings", active: false, href: undefined },
 ];
 
-const STAT_CARDS = [
-  { label: "Monitored", value: "24", desc: "companies" },
-  { label: "Alerts this week", value: "3", desc: "" },
-  { label: "Searches this month", value: "47", desc: "" },
-  { label: "Reports generated", value: "8", desc: "" },
-];
-
-const RECENT_SEARCHES = [
-  { name: "Tesco PLC", number: "00445790", sector: "Retail", status: "active" },
-  {
-    name: "Barratt Developments PLC",
-    number: "00604574",
-    sector: "Construction",
-    status: "active",
-  },
-  {
-    name: "Carillion PLC",
-    number: "03675085",
-    sector: "Construction",
-    status: "dissolved",
-  },
-  {
-    name: "Octopus Energy Ltd",
-    number: "09263424",
-    sector: "Energy",
-    status: "active",
-  },
-  {
-    name: "Deliveroo PLC",
-    number: "08167130",
-    sector: "Food & Delivery",
-    status: "active",
-  },
-  {
-    name: "BHS Group Ltd",
-    number: "00308764",
-    sector: "Retail",
-    status: "dissolved",
-  },
-];
-
-const WATCHLIST = [
-  {
-    name: "Tesco PLC",
-    status: "active",
-    accountsText: "Accounts filed 3 months ago",
-    monthsOld: 3,
-  },
-  {
-    name: "Barratt Developments PLC",
-    status: "active",
-    accountsText: "Accounts filed 8 months ago",
-    monthsOld: 8,
-  },
-  {
-    name: "Taylor Wimpey PLC",
-    status: "active",
-    accountsText: "Accounts filed 14 months ago",
-    monthsOld: 14,
-  },
-  {
-    name: "Octopus Energy Ltd",
-    status: "active",
-    accountsText: "Accounts filed 6 months ago",
-    monthsOld: 6,
-  },
-  {
-    name: "Carillion PLC",
-    status: "dissolved",
-    accountsText: "Accounts filed 15 months ago",
-    monthsOld: 15,
-  },
-];
-
-const ALERTS = [
-  {
-    type: "New filing",
-    company: "Tesco PLC",
-    desc: "Annual accounts filed for year ended Jan 2025",
-    time: "2 hours ago",
-  },
-  {
-    type: "Director",
-    company: "Taylor Wimpey PLC",
-    desc: "New director appointed: Jane Smith",
-    time: "1 day ago",
-  },
-  {
-    type: "Status",
-    company: "Carillion PLC",
-    desc: "Company status changed to dissolved",
-    time: "3 days ago",
-  },
-  {
-    type: "New filing",
-    company: "Octopus Energy Ltd",
-    desc: "Confirmation statement filed",
-    time: "5 days ago",
-  },
-];
-
 function alertBadge(type: string): { bg: string; color: string } {
-  if (type === "New filing") return { bg: "rgba(79,70,229,0.10)", color: "#4f46e5" };
-  if (type === "Director") return { bg: "rgba(234,179,8,0.12)", color: "#a16207" };
-  if (type === "Status") return { bg: "rgba(220,38,38,0.10)", color: "#dc2626" };
+  const t = (type ?? "").toLowerCase();
+  if (t.includes("filing")) return { bg: "rgba(79,70,229,0.10)", color: "#4f46e5" };
+  if (t.includes("director") || t.includes("officer")) return { bg: "rgba(234,179,8,0.12)", color: "#a16207" };
+  if (t.includes("status") || t.includes("dissolved")) return { bg: "rgba(220,38,38,0.10)", color: "#dc2626" };
   return { bg: "#f1f5f9", color: "#475569" };
 }
 
-function StatusBadge({
-  status,
-  small,
-}: {
-  status: string;
-  small?: boolean;
-}) {
-  const active = status === "active";
+function StatusBadge({ status, small }: { status: string; small?: boolean }) {
+  const active = (status ?? "").toLowerCase() === "active";
   return (
     <span
       style={{
@@ -146,11 +40,130 @@ function StatusBadge({
   );
 }
 
+function accountsText(lastAccountsDate: string | null): { text: string; old: boolean } {
+  if (!lastAccountsDate) return { text: "No accounts on record", old: false };
+  const filed = new Date(lastAccountsDate);
+  const now = new Date();
+  const months =
+    (now.getFullYear() - filed.getFullYear()) * 12 +
+    (now.getMonth() - filed.getMonth());
+  if (months <= 0) return { text: "Accounts filed recently", old: false };
+  return {
+    text: `Accounts filed ${months} month${months !== 1 ? "s" : ""} ago`,
+    old: months > 12,
+  };
+}
+
+function relativeTime(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins} minute${mins !== 1 ? "s" : ""} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days !== 1 ? "s" : ""} ago`;
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // ── Supabase queries ──────────────────────────────────────────────────────
+  let watchlistCount = 0;
+  let alertsWeekCount = 0;
+  let searchesMonthCount = 0;
+  let reportsCount = 0;
+  let recentSearches: {
+    company_name: string;
+    company_number: string;
+    company_status: string | null;
+    searched_at: string;
+  }[] = [];
+  let watchlistRows: {
+    company_name: string;
+    company_number: string;
+    company_status: string;
+    last_accounts_date: string | null;
+    next_accounts_due: string | null;
+  }[] = [];
+  let recentAlerts: {
+    id: string;
+    alert_type: string;
+    company_name: string;
+    description: string;
+    created_at: string;
+  }[] = [];
+
+  if (user) {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [
+      watchlistCountRes,
+      alertsWeekRes,
+      searchesMonthRes,
+      reportsTotalRes,
+      recentSearchesRes,
+      watchlistRowsRes,
+      recentAlertsRes,
+    ] = await Promise.all([
+      supabase
+        .from("watchlist")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id),
+      supabase
+        .from("alerts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", sevenDaysAgo.toISOString()),
+      supabase
+        .from("searches")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("searched_at", monthStart.toISOString()),
+      supabase
+        .from("analysis_cache")
+        .select("company_number", { count: "exact", head: true }),
+      supabase
+        .from("searches")
+        .select("company_name, company_number, company_status, searched_at")
+        .eq("user_id", user.id)
+        .order("searched_at", { ascending: false })
+        .limit(6),
+      supabase
+        .from("watchlist")
+        .select("company_name, company_number, company_status, last_accounts_date, next_accounts_due")
+        .eq("user_id", user.id)
+        .order("company_name")
+        .limit(5),
+      supabase
+        .from("alerts")
+        .select("id, alert_type, company_name, description, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(5),
+    ]);
+
+    watchlistCount = watchlistCountRes.count ?? 0;
+    alertsWeekCount = alertsWeekRes.count ?? 0;
+    searchesMonthCount = searchesMonthRes.count ?? 0;
+    reportsCount = reportsTotalRes.count ?? 0;
+    recentSearches = (recentSearchesRes.data ?? []) as typeof recentSearches;
+    watchlistRows = (watchlistRowsRes.data ?? []) as typeof watchlistRows;
+    recentAlerts = (recentAlertsRes.data ?? []) as typeof recentAlerts;
+  }
+
+  const statCards = [
+    { label: "Monitored", value: String(watchlistCount), desc: "companies" },
+    { label: "Alerts this week", value: String(alertsWeekCount), desc: "" },
+    { label: "Searches this month", value: String(searchesMonthCount), desc: "" },
+    { label: "Reports generated", value: String(reportsCount), desc: "" },
+  ];
 
   return (
     <div
@@ -277,10 +290,10 @@ export default async function DashboardPage() {
                 marginBottom: "4px",
               }}
             >
-              Good morning, Marcus
+              Dashboard
             </h1>
             <p style={{ fontSize: "13px", color: "#94a3b8", margin: 0 }}>
-              4 companies updated since your last visit
+              {user?.email ?? ""}
             </p>
           </div>
           <SearchToggleBar />
@@ -296,7 +309,7 @@ export default async function DashboardPage() {
             marginBottom: "24px",
           }}
         >
-          {STAT_CARDS.map((card) => (
+          {statCards.map((card) => (
             <div
               key={card.label}
               style={{
@@ -379,94 +392,111 @@ export default async function DashboardPage() {
                 </div>
               </div>
 
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    {["Company", "Number", "Sector", "Status", ""].map(
-                      (col) => (
-                        <th
-                          key={col}
-                          style={{
-                            padding: "10px 18px",
-                            textAlign: "left",
-                            fontSize: "11px",
-                            fontWeight: "600",
-                            color: "#94a3b8",
-                            letterSpacing: "0.06em",
-                            textTransform: "uppercase",
-                            borderBottom: "1px solid #e2e8f0",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {col}
-                        </th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {RECENT_SEARCHES.map((company, i) => (
-                    <tr
-                      key={company.number}
-                      style={{
-                        borderBottom:
-                          i < RECENT_SEARCHES.length - 1
-                            ? "1px solid #f1f5f9"
-                            : "none",
-                      }}
-                    >
-                      <td
-                        style={{
-                          padding: "13px 18px",
-                          fontSize: "13px",
-                          fontWeight: "500",
-                          color: "#0f172a",
-                        }}
-                      >
-                        {company.name}
-                      </td>
-                      <td
-                        style={{
-                          padding: "13px 18px",
-                          fontSize: "12px",
-                          color: "#475569",
-                          fontFamily: "'Courier New', monospace",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {company.number}
-                      </td>
-                      <td
-                        style={{
-                          padding: "13px 18px",
-                          fontSize: "12px",
-                          color: "#475569",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {company.sector}
-                      </td>
-                      <td style={{ padding: "13px 18px" }}>
-                        <StatusBadge status={company.status} />
-                      </td>
-                      <td style={{ padding: "13px 18px" }}>
-                        <a
-                          href={`/company/${company.number}`}
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            color: "#4f46e5",
-                            textDecoration: "none",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          View →
-                        </a>
-                      </td>
+              {recentSearches.length === 0 ? (
+                <div
+                  style={{
+                    padding: "40px 24px",
+                    textAlign: "center",
+                    color: "#94a3b8",
+                    fontSize: "13px",
+                  }}
+                >
+                  <div style={{ fontSize: "24px", marginBottom: "8px" }}>🔍</div>
+                  <div style={{ fontWeight: "600", color: "#64748b", marginBottom: "4px" }}>
+                    No searches yet
+                  </div>
+                  Search for a company to see your history here
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {["Company", "Number", "Status", "Searched", ""].map(
+                        (col) => (
+                          <th
+                            key={col}
+                            style={{
+                              padding: "10px 18px",
+                              textAlign: "left",
+                              fontSize: "11px",
+                              fontWeight: "600",
+                              color: "#94a3b8",
+                              letterSpacing: "0.06em",
+                              textTransform: "uppercase",
+                              borderBottom: "1px solid #e2e8f0",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {col}
+                          </th>
+                        )
+                      )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {recentSearches.map((row, i) => (
+                      <tr
+                        key={`${row.company_number}-${i}`}
+                        style={{
+                          borderBottom:
+                            i < recentSearches.length - 1
+                              ? "1px solid #f1f5f9"
+                              : "none",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "13px 18px",
+                            fontSize: "13px",
+                            fontWeight: "500",
+                            color: "#0f172a",
+                          }}
+                        >
+                          {row.company_name}
+                        </td>
+                        <td
+                          style={{
+                            padding: "13px 18px",
+                            fontSize: "12px",
+                            color: "#475569",
+                            fontFamily: "'Courier New', monospace",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {row.company_number}
+                        </td>
+                        <td style={{ padding: "13px 18px" }}>
+                          <StatusBadge status={row.company_status ?? ""} />
+                        </td>
+                        <td
+                          style={{
+                            padding: "13px 18px",
+                            fontSize: "12px",
+                            color: "#94a3b8",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {relativeTime(row.searched_at)}
+                        </td>
+                        <td style={{ padding: "13px 18px" }}>
+                          <a
+                            href={`/company/${row.company_number}`}
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              color: "#4f46e5",
+                              textDecoration: "none",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            View →
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
@@ -502,7 +532,7 @@ export default async function DashboardPage() {
                   Watchlist
                 </div>
                 <a
-                  href="#"
+                  href="/watchlist"
                   style={{
                     fontSize: "12px",
                     color: "#4f46e5",
@@ -514,70 +544,76 @@ export default async function DashboardPage() {
                 </a>
               </div>
 
-              <div>
-                {WATCHLIST.map((company, i) => (
-                  <div
-                    key={company.name}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      padding: "11px 16px",
-                      borderBottom:
-                        i < WATCHLIST.length - 1
-                          ? "1px solid #f1f5f9"
-                          : "none",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0, marginRight: "8px" }}>
+              {watchlistRows.length === 0 ? (
+                <div
+                  style={{
+                    padding: "28px 16px",
+                    textAlign: "center",
+                    color: "#94a3b8",
+                    fontSize: "12px",
+                  }}
+                >
+                  <div style={{ fontSize: "20px", marginBottom: "6px" }}>⭐</div>
+                  <div style={{ fontWeight: "600", color: "#64748b", marginBottom: "3px" }}>
+                    No companies yet
+                  </div>
+                  Add companies from any company page
+                </div>
+              ) : (
+                <div>
+                  {watchlistRows.map((row, i) => {
+                    const accts = accountsText(row.last_accounts_date);
+                    return (
                       <div
+                        key={row.company_number}
                         style={{
                           display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          marginBottom: "4px",
-                          flexWrap: "wrap",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          padding: "11px 16px",
+                          borderBottom:
+                            i < watchlistRows.length - 1
+                              ? "1px solid #f1f5f9"
+                              : "none",
                         }}
                       >
-                        <span
-                          style={{
-                            fontSize: "13px",
-                            fontWeight: "500",
-                            color: "#0f172a",
-                          }}
-                        >
-                          {company.name}
-                        </span>
-                        <StatusBadge status={company.status} small />
+                        <div style={{ flex: 1, minWidth: 0, marginRight: "8px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              marginBottom: "4px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <a
+                              href={`/company/${row.company_number}`}
+                              style={{
+                                fontSize: "13px",
+                                fontWeight: "500",
+                                color: "#0f172a",
+                                textDecoration: "none",
+                              }}
+                            >
+                              {row.company_name}
+                            </a>
+                            <StatusBadge status={row.company_status} small />
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: accts.old ? "#d97706" : "#94a3b8",
+                            }}
+                          >
+                            {accts.text}
+                          </div>
+                        </div>
                       </div>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color:
-                            company.monthsOld > 12 ? "#d97706" : "#94a3b8",
-                        }}
-                      >
-                        {company.accountsText}
-                      </div>
-                    </div>
-                    <button
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "#cbd5e1",
-                        fontSize: "18px",
-                        lineHeight: "1",
-                        padding: "0",
-                        flexShrink: 0,
-                        marginTop: "1px",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Recent alerts card */}
@@ -610,7 +646,7 @@ export default async function DashboardPage() {
                   Recent alerts
                 </div>
                 <a
-                  href="#"
+                  href="/alerts"
                   style={{
                     fontSize: "12px",
                     color: "#4f46e5",
@@ -622,69 +658,88 @@ export default async function DashboardPage() {
                 </a>
               </div>
 
-              <div>
-                {ALERTS.map((alert, i) => {
-                  const badge = alertBadge(alert.type);
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        padding: "11px 16px",
-                        borderBottom:
-                          i < ALERTS.length - 1 ? "1px solid #f1f5f9" : "none",
-                      }}
-                    >
+              {recentAlerts.length === 0 ? (
+                <div
+                  style={{
+                    padding: "28px 16px",
+                    textAlign: "center",
+                    color: "#94a3b8",
+                    fontSize: "12px",
+                  }}
+                >
+                  <div style={{ fontSize: "20px", marginBottom: "6px" }}>🔔</div>
+                  <div style={{ fontWeight: "600", color: "#64748b", marginBottom: "3px" }}>
+                    No alerts yet
+                  </div>
+                  Alerts appear when watched companies update
+                </div>
+              ) : (
+                <div>
+                  {recentAlerts.map((alert, i) => {
+                    const badge = alertBadge(alert.alert_type);
+                    return (
                       <div
+                        key={alert.id}
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          marginBottom: "4px",
+                          padding: "11px 16px",
+                          borderBottom:
+                            i < recentAlerts.length - 1
+                              ? "1px solid #f1f5f9"
+                              : "none",
                         }}
                       >
-                        <span
+                        <div
                           style={{
-                            fontSize: "10px",
-                            fontWeight: "600",
-                            padding: "2px 7px",
-                            borderRadius: "100px",
-                            backgroundColor: badge.bg,
-                            color: badge.color,
-                            whiteSpace: "nowrap",
-                            flexShrink: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            marginBottom: "4px",
                           }}
                         >
-                          {alert.type}
-                        </span>
-                        <span
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: "600",
+                              padding: "2px 7px",
+                              borderRadius: "100px",
+                              backgroundColor: badge.bg,
+                              color: badge.color,
+                              whiteSpace: "nowrap",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {alert.alert_type}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: "500",
+                              color: "#0f172a",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {alert.company_name}
+                          </span>
+                        </div>
+                        <div
                           style={{
                             fontSize: "12px",
-                            fontWeight: "500",
-                            color: "#0f172a",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            color: "#475569",
+                            marginBottom: "3px",
                           }}
                         >
-                          {alert.company}
-                        </span>
+                          {alert.description}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                          {relativeTime(alert.created_at)}
+                        </div>
                       </div>
-                      <div
-                        style={{
-                          fontSize: "12px",
-                          color: "#475569",
-                          marginBottom: "3px",
-                        }}
-                      >
-                        {alert.desc}
-                      </div>
-                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>
-                        {alert.time}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
