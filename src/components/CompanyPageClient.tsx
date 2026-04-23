@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
+import FinancialSnapshotPanel from "@/components/FinancialSnapshotPanel";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1194,7 +1195,7 @@ export default function CompanyPageClient({
 
           {/* Financials tab */}
           {activeTab === "financials" && (
-            <div style={{ padding: "24px", color: "grey" }}>Coming soon</div>
+            <FinancialSnapshotPanel companyNumber={company.company_number} />
           )}
 
           {/* AI analysis tab */}
