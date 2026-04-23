@@ -14,6 +14,6 @@ export interface FinancialSnapshot {
   years: FinancialYear[];
   fetchedAt: string;
   cached?: boolean;
-  source: "ixbrl" | "none";
+  source: "ixbrl" | "none" | "pdf-only";
   error?: string;
 }

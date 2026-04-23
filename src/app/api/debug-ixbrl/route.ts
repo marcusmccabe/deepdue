@@ -1,23 +1,26 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 30;
 
 const CH_BASE = "https://api.company-information.service.gov.uk";
 const CH_DOC_BASE = "https://document-api.company-information.service.gov.uk";
-const COMPANY_NUMBER = "00445790";
+const DEFAULT_COMPANY = "00445790";
 
 function chAuth(): string {
   const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
   return "Basic " + Buffer.from(`${key}:`).toString("base64");
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const companyNumber = (searchParams.get("company") ?? DEFAULT_COMPANY).toUpperCase();
+
   const log: string[] = [];
-  const result: Record<string, unknown> = { log };
+  const result: Record<string, unknown> = { log, companyNumber };
 
   // Step 1: fetch filing history
-  log.push(`Fetching filing history for ${COMPANY_NUMBER}`);
-  const historyUrl = `${CH_BASE}/company/${COMPANY_NUMBER}/filing-history?category=accounts&items_per_page=15`;
+  log.push(`Fetching filing history for ${companyNumber}`);
+  const historyUrl = `${CH_BASE}/company/${companyNumber}/filing-history?category=accounts&items_per_page=15`;
   log.push(`GET ${historyUrl}`);
 
   let filings: Array<{
@@ -96,11 +99,27 @@ export async function GET() {
       const docLink = metaBody?.links?.document as string | undefined;
       const resources = metaBody?.resources as Record<string, { content_length?: number; links?: { document?: string } }> | undefined;
 
+      // Always surface resources so callers can see what formats CH is offering
+      if (resources) {
+        const contentTypes = Object.keys(resources);
+        const hasXhtml = contentTypes.some((k) => k.toLowerCase().includes("xhtml"));
+        const hasPdf = contentTypes.some((k) => k.toLowerCase().includes("pdf"));
+        result.resources = resources;
+        result.resourcesContentTypes = contentTypes;
+        result.resourcesHasXhtml = hasXhtml;
+        result.resourcesHasPdf = hasPdf;
+        result.resourcesFormatVerdict = !hasXhtml && hasPdf ? "pdf-only" : hasXhtml ? "ixbrl-available" : "unknown";
+        log.push(`resources content-types: [${contentTypes.join(", ")}]`);
+        log.push(`format verdict: ${result.resourcesFormatVerdict}`);
+      } else {
+        result.resources = null;
+        log.push("metadata has no resources field");
+      }
+
       if (docLink) {
         log.push(`links.document from metadata: ${docLink}`);
         docContentUrl = docLink;
       } else if (resources) {
-        log.push(`resources keys: ${Object.keys(resources).join(", ")}`);
         // Prefer XHTML, fall back to first available
         const xhtmlKey = Object.keys(resources).find((k) => k.toLowerCase().includes("xhtml"));
         const chosenKey = xhtmlKey ?? Object.keys(resources)[0];
