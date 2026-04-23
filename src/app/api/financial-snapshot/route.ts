@@ -196,7 +196,7 @@ async function fetchAndParseIxbrl(
   docId: string,
   periodEnd: string,
   companyNumber: string
-): Promise<Omit<FinancialYear, "periodEnd" | "year">> {
+): Promise<Omit<FinancialYear, "periodEnd" | "year"> & { pdfOnly?: true }> {
   const tag = `[ixbrl:${companyNumber}:${docId.slice(0, 8)}]`;
   const empty = {
     turnover: null,
@@ -208,11 +208,56 @@ async function fetchAndParseIxbrl(
   };
 
   try {
+    // Step 1: fetch metadata to check available content formats
+    const metaUrl = `${CH_DOC_BASE}/document/${docId}`;
+    console.log(`${tag} fetching metadata ${metaUrl}`);
+
+    let acceptHeader = "application/xhtml+xml";
+
+    try {
+      const metaRes = await fetch(metaUrl, {
+        headers: { Authorization: chAuth(), Accept: "application/json" },
+        cache: "no-store",
+      });
+      console.log(`${tag} metadata status=${metaRes.status}`);
+
+      if (metaRes.ok) {
+        const metaBody = await metaRes.json();
+        const resources = metaBody?.resources as Record<string, unknown> | undefined;
+
+        if (resources) {
+          const contentTypes = Object.keys(resources);
+          const hasXhtml = contentTypes.some((k) => k.toLowerCase().includes("xhtml"));
+          const hasPdf = contentTypes.some((k) => k.toLowerCase().includes("pdf"));
+          console.log(`${tag} resources content-types: [${contentTypes.join(", ")}]`);
+
+          if (!hasXhtml && hasPdf) {
+            console.log(`${tag} only PDF available in resources — skipping download (pdf-only)`);
+            return { ...empty, pdfOnly: true };
+          }
+
+          if (hasXhtml) {
+            acceptHeader = "application/xhtml+xml";
+            console.log(`${tag} found application/xhtml+xml in resources — requesting iXBRL`);
+          } else {
+            console.log(`${tag} no recognised format in resources [${contentTypes.join(", ")}] — attempting with ${acceptHeader}`);
+          }
+        } else {
+          console.log(`${tag} metadata has no resources field — attempting content fetch`);
+        }
+      } else {
+        console.log(`${tag} metadata returned ${metaRes.status} — attempting content fetch anyway`);
+      }
+    } catch (metaErr) {
+      console.log(`${tag} metadata fetch threw: ${String(metaErr)} — attempting content fetch anyway`);
+    }
+
+    // Step 2: fetch document content
     const url = `${CH_DOC_BASE}/document/${docId}/content`;
-    console.log(`${tag} fetching ${url} (periodEnd=${periodEnd})`);
+    console.log(`${tag} fetching ${url} (Accept: ${acceptHeader}, periodEnd=${periodEnd})`);
 
     const res = await fetch(url, {
-      headers: { Authorization: chAuth(), Accept: "application/xhtml+xml" },
+      headers: { Authorization: chAuth(), Accept: acceptHeader },
       cache: "no-store",
     });
 
@@ -420,9 +465,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  type ParseResult = FinancialYear & { pdfOnly?: true };
+
   // Download & parse each filing in parallel
   const settled = await Promise.allSettled(
-    candidates.map(async (filing): Promise<FinancialYear> => {
+    candidates.map(async (filing): Promise<ParseResult> => {
       const periodEnd =
         filing.description_values?.made_up_date ?? filing.date ?? "";
       const year = periodEnd.substring(0, 4);
@@ -451,20 +498,29 @@ export async function GET(request: NextRequest) {
     })
   );
 
-  const years: FinancialYear[] = settled
+  const results: ParseResult[] = settled
     .filter((r) => r.status === "fulfilled")
-    .map((r) => (r as PromiseFulfilledResult<FinancialYear>).value);
+    .map((r) => (r as PromiseFulfilledResult<ParseResult>).value);
 
+  const years: FinancialYear[] = results.map(({ pdfOnly: _p, ...year }) => year as FinancialYear);
   const hasAnyData = years.some((y) => y.hasData);
+  const hasPdfOnly = results.some((r) => r.pdfOnly === true);
+
+  const source: FinancialSnapshot["source"] = hasAnyData
+    ? "ixbrl"
+    : hasPdfOnly
+    ? "pdf-only"
+    : "none";
+
   console.log(
-    `[ixbrl] ${companyNumber} parse complete: ${years.length} years, hasAnyData=${hasAnyData}`
+    `[ixbrl] ${companyNumber} parse complete: ${years.length} years, hasAnyData=${hasAnyData} hasPdfOnly=${hasPdfOnly} source=${source}`
   );
 
   const snapshot: FinancialSnapshot = {
     companyNumber,
     years,
     fetchedAt: new Date().toISOString(),
-    source: hasAnyData ? "ixbrl" : "none",
+    source,
   };
 
   // Only cache for 24 h when we got data; use 5-min TTL for empty results to
