@@ -7,7 +7,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AccountsAnalysis } from "./analysis-types";
 
-const CACHE_TTL_DAYS = 30;
+const CACHE_TTL_DAYS = 90;
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
