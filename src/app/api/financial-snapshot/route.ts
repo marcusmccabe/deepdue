@@ -5,7 +5,7 @@ export const maxDuration = 30;
 
 const CH_BASE = "https://api.company-information.service.gov.uk";
 const CH_DOC_BASE = "https://document-api.company-information.service.gov.uk";
-const MAX_DOC_BYTES = 6 * 1024 * 1024;
+const MAX_DOC_BYTES = 30 * 1024 * 1024;
 const CACHE_TTL = 86_400_000; // 24 h
 
 const cache = new Map<string, { data: FinancialSnapshot; ts: number }>();
@@ -29,6 +29,7 @@ const TURNOVER_CONCEPTS = [
 const OP_PROFIT_CONCEPTS = [
   "OperatingProfitLoss",
   "OperatingProfit",
+  "ProfitLossFromOperatingActivities", // ifrs-full
   "ProfitLossFromOperations",
   "ProfitLossBeforeInterestTaxDepreciationAmortisation",
   "ProfitBeforeInterestAndTaxation",
@@ -52,6 +53,7 @@ const CASH_CONCEPTS = [
   "CashInHand",
 ];
 const LIABILITIES_CONCEPTS = [
+  "Liabilities", // ifrs-full total liabilities
   "TotalLiabilities",
   "LiabilitiesTotal",
   "Creditors",
@@ -68,13 +70,17 @@ const LIABILITIES_CONCEPTS = [
  * Returns { period, instant } where:
  *   - period  = xbrli:context with an endDate matching targetDate (P&L items)
  *   - instant = xbrli:context with an instant matching targetDate (balance sheet items)
+ *
+ * Prefers contexts without a segment/scenario element (i.e. the consolidated
+ * entity-level context) over dimensional/segment contexts, which is critical
+ * for IFRS filers like large PLCs that tag segment data in the same document.
  */
 function findContexts(
   html: string,
   targetDate: string
 ): { period: string | null; instant: string | null } {
-  let periodCtx: string | null = null;
-  let instantCtx: string | null = null;
+  const periodCandidates: Array<{ id: string; hasSegment: boolean }> = [];
+  const instantCandidates: Array<{ id: string; hasSegment: boolean }> = [];
 
   // Handles both "xbrli:context" and plain "context" element names
   const contextRe =
@@ -82,25 +88,34 @@ function findContexts(
   let m: RegExpExecArray | null;
 
   while ((m = contextRe.exec(html)) !== null) {
-    if (periodCtx && instantCtx) break;
     const [, id, body] = m;
+    // Segment or scenario qualifier → dimensional/member context, not entity-level
+    const hasSegment = /<(?:[a-z]+:)?(?:segment|scenario)\b/i.test(body);
 
-    if (!periodCtx) {
-      const endM = body.match(
-        /<(?:[a-z]+:)?endDate>\s*([^\s<]+)\s*<\/(?:[a-z]+:)?endDate>/i
-      );
-      if (endM && endM[1].trim() === targetDate) periodCtx = id;
+    const endM = body.match(
+      /<(?:[a-z]+:)?endDate>\s*([^\s<]+)\s*<\/(?:[a-z]+:)?endDate>/i
+    );
+    if (endM && endM[1].trim() === targetDate) {
+      periodCandidates.push({ id, hasSegment });
     }
 
-    if (!instantCtx) {
-      const instM = body.match(
-        /<(?:[a-z]+:)?instant>\s*([^\s<]+)\s*<\/(?:[a-z]+:)?instant>/i
-      );
-      if (instM && instM[1].trim() === targetDate) instantCtx = id;
+    const instM = body.match(
+      /<(?:[a-z]+:)?instant>\s*([^\s<]+)\s*<\/(?:[a-z]+:)?instant>/i
+    );
+    if (instM && instM[1].trim() === targetDate) {
+      instantCandidates.push({ id, hasSegment });
     }
   }
 
-  return { period: periodCtx, instant: instantCtx };
+  // Prefer entity-level (non-segment) context; fall back to first match
+  const period =
+    (periodCandidates.find((c) => !c.hasSegment) ?? periodCandidates[0])?.id ??
+    null;
+  const instant =
+    (instantCandidates.find((c) => !c.hasSegment) ?? instantCandidates[0])
+      ?.id ?? null;
+
+  return { period, instant };
 }
 
 /**
@@ -209,33 +224,17 @@ async function fetchAndParseIxbrl(
       LIABILITIES_CONCEPTS
     );
 
-    // If context-filtered extraction came up empty, fall back to first-match
+    // Fall back to first-match (no context filter) if context-scoped search
+    // returned nothing — handles edge cases where the entity-level context ID
+    // doesn't match the tagging convention used for a particular concept.
     const result = {
-      turnover:
-        turnover ??
-        (periodCtx === null
-          ? extractConcept(html, null, TURNOVER_CONCEPTS)
-          : null),
+      turnover: turnover ?? extractConcept(html, null, TURNOVER_CONCEPTS),
       operatingProfit:
-        operatingProfit ??
-        (periodCtx === null
-          ? extractConcept(html, null, OP_PROFIT_CONCEPTS)
-          : null),
-      netAssets:
-        netAssets ??
-        (instantCtx === null
-          ? extractConcept(html, null, NET_ASSETS_CONCEPTS)
-          : null),
-      cashAtBank:
-        cashAtBank ??
-        (instantCtx === null
-          ? extractConcept(html, null, CASH_CONCEPTS)
-          : null),
+        operatingProfit ?? extractConcept(html, null, OP_PROFIT_CONCEPTS),
+      netAssets: netAssets ?? extractConcept(html, null, NET_ASSETS_CONCEPTS),
+      cashAtBank: cashAtBank ?? extractConcept(html, null, CASH_CONCEPTS),
       totalLiabilities:
-        totalLiabilities ??
-        (instantCtx === null
-          ? extractConcept(html, null, LIABILITIES_CONCEPTS)
-          : null),
+        totalLiabilities ?? extractConcept(html, null, LIABILITIES_CONCEPTS),
     };
 
     const hasData = Object.values(result).some((v) => v !== null);
