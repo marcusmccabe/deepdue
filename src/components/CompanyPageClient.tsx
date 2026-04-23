@@ -685,6 +685,7 @@ export default function CompanyPageClient({
   // ── Watchlist state ─────────────────────────────────────────────────────────
   type WatchlistState = "checking" | "idle" | "saving" | "done" | "error";
   const [watchlistState, setWatchlistState] = useState<WatchlistState>("checking");
+  const [watchlistErrorMsg, setWatchlistErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     async function checkWatchlist() {
@@ -705,19 +706,25 @@ export default function CompanyPageClient({
   async function handleWatchlist() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
+    console.log("[watchlist] user:", user?.id ?? "null — not logged in");
     if (!user) { window.location.href = "/login"; return; }
     setWatchlistState("saving");
-    const { error } = await supabase.from("watchlist").insert({
+    setWatchlistErrorMsg(null);
+    const insertData = {
       user_id: user.id,
       company_number: company.company_number,
       company_name: company.company_name,
       company_status: company.company_status,
       last_accounts_date: company.accounts?.last_accounts?.made_up_to ?? null,
       next_accounts_due: company.accounts?.next_accounts?.due_on ?? company.accounts?.next_due ?? null,
-    });
+    };
+    console.log("[watchlist] inserting:", insertData);
+    const { error } = await supabase.from("watchlist").insert(insertData);
+    console.log("[watchlist] insert error:", error ?? "none");
     if (error) {
+      setWatchlistErrorMsg(`${error.message} (code: ${error.code})`);
       setWatchlistState("error");
-      setTimeout(() => setWatchlistState("idle"), 3000);
+      setTimeout(() => setWatchlistState("idle"), 5000);
     } else {
       setWatchlistState("done");
     }
@@ -787,7 +794,8 @@ export default function CompanyPageClient({
 
         <div style={{ flex: 1 }} />
 
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+          <div style={{ display: "flex", gap: "8px" }}>
           <button
             onClick={watchlistState === "idle" ? handleWatchlist : undefined}
             disabled={watchlistState !== "idle"}
@@ -855,6 +863,21 @@ export default function CompanyPageClient({
           >
             Ask AI
           </button>
+        </div>
+          {watchlistErrorMsg && (
+            <div style={{
+              fontSize: "12px",
+              color: "#dc2626",
+              backgroundColor: "rgba(220,38,38,0.06)",
+              border: "1px solid rgba(220,38,38,0.25)",
+              borderRadius: "6px",
+              padding: "6px 10px",
+              maxWidth: "340px",
+              wordBreak: "break-word",
+            }}>
+              Watchlist error: {watchlistErrorMsg}
+            </div>
+          )}
         </div>
       </div>
 
