@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCachedAnalysis, setCachedAnalysis } from "@/lib/analysis-cache";
 import type { AccountsAnalysis } from "@/lib/analysis-types";
 import { analyseWithGemini } from "@/lib/gemini-analysis";
+import { analyseWithMistral } from "@/lib/mistral-analysis";
+import { analyseWithDocAI } from "@/lib/docai-analysis";
 
 // Allow up to 60 s for the full pipeline (Vercel Pro; free tier caps at 10 s)
 export const maxDuration = 60;
@@ -24,6 +26,21 @@ const SYSTEM_PROMPT =
   "complianceSignals — object with: lateFilingHistory (string or 'None noted'), dormancyOrStrikeOff (string or 'None noted'), chargesRegistered (string or 'None registered')\n" +
   "Return only the JSON object. No preamble, no markdown, no explanation.";
 
+// ── Startup env-var check ─────────────────────────────────────────────────────
+const REQUIRED_FALLBACK_VARS = [
+  "MISTRAL_API_KEY",
+  "GOOGLE_DOCUMENT_AI_API_KEY",
+  "GOOGLE_CLOUD_PROJECT_ID",
+  "GOOGLE_CLOUD_PROCESSOR_ID",
+  "GOOGLE_CLOUD_LOCATION",
+] as const;
+
+for (const v of REQUIRED_FALLBACK_VARS) {
+  if (!process.env[v]) {
+    console.warn(`[analyse-accounts] WARNING: environment variable ${v} is not set — the corresponding fallback provider will be unavailable`);
+  }
+}
+
 function chAuth(): string {
   const key = process.env.COMPANIES_HOUSE_API_KEY ?? "";
   return "Basic " + Buffer.from(`${key}:`).toString("base64");
@@ -37,7 +54,8 @@ function chAuth(): string {
  *  2. Fetch filing history (accounts category) from Companies House
  *  3. Find the most recent filing that has a document_metadata link
  *  4. Download the PDF from the CH Document API
- *  5. Send the PDF (base64) to Claude with the financial analysis prompt
+ *  5. Try Anthropic with PDF
+ *     → on 400: try Gemini → try Mistral → try Google Document AI OCR
  *  6. Parse the JSON response
  *  7. Store in cache and return to the client
  */
@@ -122,6 +140,7 @@ export async function GET(request: NextRequest) {
 
   // ── 4. Download PDF ───────────────────────────────────────────────────────
   let pdfBase64: string;
+  let pdfBuffer: Buffer;
 
   try {
     const pdfRes = await fetch(
@@ -142,18 +161,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const buffer = await pdfRes.arrayBuffer();
+    const arrayBuffer = await pdfRes.arrayBuffer();
 
-    if (buffer.byteLength > MAX_PDF_BYTES) {
+    if (arrayBuffer.byteLength > MAX_PDF_BYTES) {
       return NextResponse.json(
         { error: "Document exceeds 20 MB size limit" },
         { status: 413 }
       );
     }
 
-    pdfBase64 = Buffer.from(buffer).toString("base64");
+    pdfBuffer = Buffer.from(arrayBuffer);
+    pdfBase64 = pdfBuffer.toString("base64");
     console.log(
-      `[analyse-accounts] ${companyNumber}: downloaded ${Math.round(buffer.byteLength / 1024)} KB PDF`
+      `[analyse-accounts] ${companyNumber}: downloaded ${Math.round(arrayBuffer.byteLength / 1024)} KB PDF`
     );
   } catch {
     return NextResponse.json(
@@ -211,9 +231,10 @@ export async function GET(request: NextRequest) {
     console.log("[analyse-accounts] → Anthropic request body (raw):", anthropicBody.slice(0, 500));
   }
 
-  try {
-    let anthropicRes!: Response;
+  let anthropicRes!: Response;
+  let anthropicHit400 = false;
 
+  try {
     for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
       if (RETRY_DELAYS_MS[attempt] > 0) {
         await new Promise((resolve) =>
@@ -250,31 +271,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!anthropicRes.ok) {
-      if (anthropicRes.status === 400) {
-        console.log(
-          `[analyse-accounts] ${companyNumber}: Anthropic 400 — falling back to Gemini`
-        );
-        try {
-          const geminiAnalysis = await analyseWithGemini(
-            pdfBase64,
-            companyNumber,
-            filing.date
-          );
-          await setCachedAnalysis(companyNumber, geminiAnalysis);
-          return NextResponse.json(geminiAnalysis);
-        } catch (geminiError) {
-          console.error("[analyse-accounts] Gemini fallback failed:", geminiError);
-          return NextResponse.json(
-            {
-              error:
-                "Analysis failed: the document could not be processed by either AI provider. The PDF may be too large or in an unsupported format.",
-            },
-            { status: 502 }
-          );
-        }
-      }
-
+    if (anthropicRes.status === 400) {
+      anthropicHit400 = true;
+    } else if (!anthropicRes.ok) {
       const body = await anthropicRes.text().catch(() => "");
       console.error("[analyse-accounts] Anthropic error:", body);
       return NextResponse.json(
@@ -282,13 +281,6 @@ export async function GET(request: NextRequest) {
         { status: 502 }
       );
     }
-
-    const aiData = await anthropicRes.json();
-    rawText = aiData.content?.[0]?.text ?? "";
-
-    console.log(
-      `[analyse-accounts] ${companyNumber}: Claude responded (${rawText.length} chars)`
-    );
   } catch {
     return NextResponse.json(
       { error: "Network error calling Anthropic API" },
@@ -296,7 +288,77 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // ── 6. Parse JSON ─────────────────────────────────────────────────────────
+  // ── Fallback chain (triggered on Anthropic 400) ───────────────────────────
+  if (anthropicHit400) {
+    console.log(
+      `[analyse-accounts] ${companyNumber}: Anthropic 400 — trying Gemini`
+    );
+
+    // Try Gemini
+    try {
+      const geminiAnalysis = await analyseWithGemini(
+        pdfBase64,
+        companyNumber,
+        filing.date
+      );
+      await setCachedAnalysis(companyNumber, geminiAnalysis);
+      return NextResponse.json(geminiAnalysis);
+    } catch (geminiError) {
+      console.error(
+        `[analyse-accounts] ${companyNumber}: Gemini failed — trying Mistral`,
+        geminiError
+      );
+    }
+
+    // Try Mistral
+    try {
+      const mistralAnalysis = await analyseWithMistral(
+        pdfBase64,
+        companyNumber,
+        filing.date
+      );
+      await setCachedAnalysis(companyNumber, mistralAnalysis);
+      return NextResponse.json(mistralAnalysis);
+    } catch (mistralError) {
+      console.error(
+        `[analyse-accounts] ${companyNumber}: Mistral failed — trying Google Document AI OCR`,
+        mistralError
+      );
+    }
+
+    // Try Google Document AI OCR → Claude text
+    try {
+      const docaiAnalysis = await analyseWithDocAI(
+        pdfBuffer,
+        companyNumber,
+        filing.date
+      );
+      await setCachedAnalysis(companyNumber, docaiAnalysis);
+      return NextResponse.json(docaiAnalysis);
+    } catch (docaiError) {
+      console.error(
+        `[analyse-accounts] ${companyNumber}: Google Document AI OCR failed — all providers exhausted`,
+        docaiError
+      );
+    }
+
+    return NextResponse.json(
+      {
+        error:
+          "Analysis failed — this document could not be processed by any available AI provider.",
+      },
+      { status: 502 }
+    );
+  }
+
+  // ── 6. Parse Anthropic JSON ───────────────────────────────────────────────
+  const aiData = await anthropicRes.json();
+  rawText = aiData.content?.[0]?.text ?? "";
+
+  console.log(
+    `[analyse-accounts] ${companyNumber}: Claude responded (${rawText.length} chars)`
+  );
+
   let analysis: AccountsAnalysis;
 
   try {

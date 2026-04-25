@@ -84,5 +84,5 @@ export interface AccountsAnalysis {
   documentDate?: string;
   cached?: boolean;
   error?: string;
-  provider?: "anthropic" | "gemini";
+  provider?: "anthropic" | "gemini" | "mistral" | "google-docai";
 }
