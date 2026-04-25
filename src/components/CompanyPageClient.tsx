@@ -195,11 +195,17 @@ function NetworkSvg({
   currentCompanyNumber: string;
   directorName: string;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const [svgW, setSvgW] = useState(500);
+  const [tfm, setTfm] = useState({ x: 0, y: 0, s: 1 });
+  const panning = useRef(false);
+  const didPan = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const [cursor, setCursor] = useState<"grab" | "grabbing">("grab");
 
   useEffect(() => {
-    const el = ref.current;
+    const el = containerRef.current;
     if (!el) return;
     setSvgW(el.clientWidth);
     const ro = new ResizeObserver((entries) => {
@@ -210,84 +216,170 @@ function NetworkSvg({
     return () => ro.disconnect();
   }, []);
 
-  const H = 360;
+  // Reset pan/zoom when selected director changes
+  useEffect(() => {
+    setTfm({ x: 0, y: 0, s: 1 });
+    setCursor("grab");
+  }, [directorName]);
+
+  // Wheel zoom — must be non-passive to call preventDefault
+  useEffect(() => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = svgEl.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      setTfm((prev: { x: number; y: number; s: number }) => {
+        const ns = Math.min(Math.max(prev.s * factor, 0.25), 5);
+        const ratio = ns / prev.s;
+        return { x: mx - ratio * (mx - prev.x), y: my - ratio * (my - prev.y), s: ns };
+      });
+    };
+    svgEl.addEventListener("wheel", onWheel, { passive: false });
+    return () => svgEl.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Pan — track mouse globally so dragging outside SVG still works
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!panning.current) return;
+      const dx = e.clientX - lastPos.current.x;
+      const dy = e.clientY - lastPos.current.y;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didPan.current = true;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      setTfm((prev: { x: number; y: number; s: number }) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+    };
+    const onUp = () => {
+      if (panning.current) { panning.current = false; setCursor("grab"); }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
+  const H = 420;
   const cx = svgW / 2;
   const cy = H / 2;
   const CR = 26;
   const NR = 18;
-  const RADIUS = Math.min(cx * 0.58, cy * 0.58, 128);
+  const RADIUS = Math.min(cx * 0.62, cy * 0.62, 145);
   const n = companies.length;
   const initials = getInitials(directorName);
+  const LABEL_OFF = NR + 22;
+
+  const zoomTo = (factor: number) =>
+    setTfm((prev: { x: number; y: number; s: number }) => ({ ...prev, s: Math.min(Math.max(prev.s * factor, 0.25), 5) }));
+
+  const ctrlBtn: CSSProperties = {
+    width: "26px", height: "26px", border: "1px solid #e2e8f0", borderRadius: "6px",
+    backgroundColor: "#fff", cursor: "pointer", fontSize: "16px", fontWeight: "600",
+    color: "#475569", display: "flex", alignItems: "center", justifyContent: "center",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)", lineHeight: 1, padding: 0,
+  };
 
   return (
-    <div ref={ref} style={{ flex: 1 }}>
-      <svg width={svgW} height={H} style={{ display: "block" }}>
-        {companies.map((appt, i) => {
-          const angle = (2 * Math.PI * i) / Math.max(n, 1) - Math.PI / 2;
-          const nx = cx + RADIUS * Math.cos(angle);
-          const ny = cy + RADIUS * Math.sin(angle);
-          const dx = nx - cx;
-          const dy = ny - cy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const ax = cx + (dx / dist) * CR;
-          const ay = cy + (dy / dist) * CR;
-          const bx = nx - (dx / dist) * NR;
-          const by = ny - (dy / dist) * NR;
+    <div ref={containerRef} style={{ flex: 1, position: "relative", userSelect: "none" }}>
+      <div style={{ position: "absolute", top: 10, right: 10, zIndex: 10, display: "flex", flexDirection: "column", gap: "4px" }}>
+        <button onClick={() => zoomTo(1.25)} style={ctrlBtn} title="Zoom in">+</button>
+        <button onClick={() => zoomTo(1 / 1.25)} style={ctrlBtn} title="Zoom out">−</button>
+        <button
+          onClick={() => { setTfm({ x: 0, y: 0, s: 1 }); setCursor("grab"); }}
+          style={{ ...ctrlBtn, width: "auto", fontSize: "9px", padding: "3px 7px", letterSpacing: "0.03em" }}
+          title="Reset view"
+        >
+          Reset
+        </button>
+      </div>
+      <svg
+        ref={svgRef}
+        width={svgW}
+        height={H}
+        style={{ display: "block", cursor }}
+        onMouseDown={(e) => {
+          if (e.button !== 0) return;
+          panning.current = true;
+          didPan.current = false;
+          lastPos.current = { x: e.clientX, y: e.clientY };
+          setCursor("grabbing");
+        }}
+      >
+        <g transform={`translate(${tfm.x},${tfm.y}) scale(${tfm.s})`}>
+          {companies.map((appt, i) => {
+            const angle = (2 * Math.PI * i) / Math.max(n, 1) - Math.PI / 2;
+            const nx = cx + RADIUS * Math.cos(angle);
+            const ny = cy + RADIUS * Math.sin(angle);
+            const dx = nx - cx;
+            const dy = ny - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const ax = cx + (dx / dist) * CR;
+            const ay = cy + (dy / dist) * CR;
+            const bx = nx - (dx / dist) * NR;
+            const by = ny - (dy / dist) * NR;
 
-          const status = appt.appointed_to?.company_status ?? "unknown";
-          const isCurrent = !!(appt.isCurrent || appt.appointed_to?.company_number === currentCompanyNumber);
-          const isActive = !isCurrent && status === "active";
-          const isDissolved = status === "dissolved";
+            const status = appt.appointed_to?.company_status ?? "unknown";
+            const isCurrent = !!(appt.isCurrent || appt.appointed_to?.company_number === currentCompanyNumber);
+            const isActive = !isCurrent && status === "active";
+            const isDissolved = status === "dissolved";
 
-          const stroke = isCurrent ? "#d97706" : isActive ? "#059669" : isDissolved ? "#dc2626" : "#94a3b8";
-          const fill = isCurrent
-            ? "rgba(217,119,6,0.07)"
-            : isActive
-            ? "rgba(5,150,105,0.07)"
-            : isDissolved
-            ? "rgba(220,38,38,0.07)"
-            : "#f8fafc";
+            const stroke = isCurrent ? "#d97706" : isActive ? "#059669" : isDissolved ? "#dc2626" : "#94a3b8";
+            const fill = isCurrent
+              ? "rgba(217,119,6,0.07)"
+              : isActive
+              ? "rgba(5,150,105,0.07)"
+              : isDissolved
+              ? "rgba(220,38,38,0.07)"
+              : "#f8fafc";
 
-          const compNum = appt.appointed_to?.company_number;
-          const rawName = appt.appointed_to?.company_name ?? "Unknown";
-          const name = toTitleCase(rawName);
-          const truncName = name.length > 20 ? name.slice(0, 19) + "…" : name;
+            const compNum = appt.appointed_to?.company_number;
+            const rawName = appt.appointed_to?.company_name ?? "Unknown";
+            const name = toTitleCase(rawName);
+            const displayName = name.length > 25 ? name.slice(0, 24) + "…" : name;
 
-          const labelDist = NR + 14;
-          const lx = nx + (dx / dist) * labelDist;
-          const ly = ny + (dy / dist) * labelDist;
-          const anchor: "start" | "middle" | "end" =
-            Math.abs(dx) > Math.abs(dy) * 1.5 ? (dx > 0 ? "start" : "end") : "middle";
+            const lx = nx + (dx / dist) * LABEL_OFF;
+            const ly = ny + (dy / dist) * LABEL_OFF;
+            // Right half → left-align right of node; left half → right-align left; top/bottom → centre
+            const isXDominant = Math.abs(dx) > Math.abs(dy) * 0.7;
+            const anchor: "start" | "middle" | "end" = isXDominant ? (dx > 0 ? "start" : "end") : "middle";
+            const baseline = isXDominant ? "middle" : (dy > 0 ? "hanging" : "auto");
 
-          return (
-            <g key={i}>
-              <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#e2e8f0" strokeWidth={1.5} />
-              <g
-                style={{ cursor: compNum ? "pointer" : "default" }}
-                onClick={() => { if (compNum) window.location.href = `/company/${compNum}`; }}
-              >
-                <circle cx={nx} cy={ny} r={NR + 8} fill="transparent" />
-                <circle cx={nx} cy={ny} r={NR} fill={fill} stroke={stroke} strokeWidth={2.5} />
-                <text
-                  x={lx} y={ly} textAnchor={anchor}
-                  fontSize="9" fontWeight="500" fill="#475569"
-                  style={{ pointerEvents: "none" }}
+            return (
+              <g key={i}>
+                <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#e2e8f0" strokeWidth={1.5} />
+                <g
+                  style={{ cursor: compNum ? "pointer" : "default" }}
+                  onClick={() => {
+                    if (didPan.current) return;
+                    if (compNum) window.location.href = `/company/${compNum}`;
+                  }}
                 >
-                  {truncName}
-                </text>
+                  <circle cx={nx} cy={ny} r={NR + 8} fill="transparent" />
+                  <circle cx={nx} cy={ny} r={NR} fill={fill} stroke={stroke} strokeWidth={2.5} />
+                  <text
+                    x={lx} y={ly}
+                    textAnchor={anchor}
+                    dominantBaseline={baseline}
+                    fontSize="11" fontWeight="500" fill="#475569"
+                    style={{ pointerEvents: "none" }}
+                  >
+                    {displayName}
+                  </text>
+                </g>
               </g>
-            </g>
-          );
-        })}
-        <circle cx={cx} cy={cy} r={CR} fill="#4f46e5" />
-        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>
-          {initials}
-        </text>
-        {hiddenCount > 0 && (
-          <text x={cx} y={H - 10} textAnchor="middle" fontSize="11" fill="#94a3b8">
-            +{hiddenCount} more not shown
+            );
+          })}
+          <circle cx={cx} cy={cy} r={CR} fill="#4f46e5" />
+          <text x={cx} y={cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>
+            {initials}
           </text>
-        )}
+          {hiddenCount > 0 && (
+            <text x={cx} y={H - 20} textAnchor="middle" fontSize="11" fill="#94a3b8">
+              +{hiddenCount} more not shown
+            </text>
+          )}
+        </g>
       </svg>
     </div>
   );
