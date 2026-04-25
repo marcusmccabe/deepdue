@@ -82,9 +82,8 @@ export default async function PricingPage() {
             lineHeight: '1',
           }}
         >
-          <span style={{ color: '#0f172a' }}>Deep</span>
-          <span style={{ color: '#4f46e5' }}>Due</span>
-          <span style={{ color: '#94a3b8', fontSize: '15px' }}>.ai</span>
+          <span style={{ color: '#0f172a' }}>Docu</span>
+          <span style={{ color: '#4f46e5' }}>Data</span>
         </a>
         <h1
           style={{

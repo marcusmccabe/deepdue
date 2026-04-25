@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DeepDue — UK Company Intelligence",
+  title: "DocuData — UK Company Intelligence",
   description:
     "AI-powered company intelligence for UK businesses. Credit health, document analysis and director insights — in seconds.",
 };

@@ -286,9 +286,8 @@ export default function FinancialsPage() {
             fontSize: "18px",
           }}
         >
-          <span style={{ color: "#0f172a" }}>Deep</span>
-          <span style={{ color: "#4f46e5" }}>Due</span>
-          <span style={{ color: "#94a3b8", fontSize: "13px" }}>.ai</span>
+          <span style={{ color: "#0f172a" }}>Docu</span>
+          <span style={{ color: "#4f46e5" }}>Data</span>
         </div>
       </nav>
 
