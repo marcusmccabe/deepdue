@@ -159,7 +159,7 @@ export default function LoginPage() {
   }
 
   const titles: Record<Mode, string> = {
-    signin: "Sign in to DeepDue",
+    signin: "Sign in to DocuData",
     signup: "Create your account",
     verify: "Verify your email",
   };
@@ -205,9 +205,8 @@ export default function LoginPage() {
             marginBottom: "32px",
           }}
         >
-          <span style={{ color: "#0f172a" }}>Deep</span>
-          <span style={{ color: "#4f46e5" }}>Due</span>
-          <span style={{ color: "#94a3b8", fontSize: "15px" }}>.ai</span>
+          <span style={{ color: "#0f172a" }}>Docu</span>
+          <span style={{ color: "#4f46e5" }}>Data</span>
         </div>
 
         {/* Title */}
