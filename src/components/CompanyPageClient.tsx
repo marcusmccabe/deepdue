@@ -92,6 +92,17 @@ function fmtARD(ard: { day?: string | number; month?: string | number }): string
   return m >= 1 && m <= 12 ? `${ard.day} ${MONTHS[m - 1]}` : "—";
 }
 
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return (words[0][0] ?? "?").toUpperCase();
+  return ((words[0][0] ?? "") + (words[words.length - 1][0] ?? "")).toUpperCase();
+}
+
 // ── Shared styles ─────────────────────────────────────────────────────────────
 
 const CARD: CSSProperties = {
@@ -156,6 +167,405 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status || "unknown"}
     </span>
+  );
+}
+
+// ── Director Network Tab — rich split-panel ───────────────────────────────────
+
+function LegendItem({ color, bgColor, label }: { color: string; bgColor?: string; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+      <div style={{
+        width: "11px", height: "11px", borderRadius: "50%",
+        border: `2px solid ${color}`, backgroundColor: bgColor ?? "transparent", flexShrink: 0,
+      }} />
+      <span style={{ fontSize: "11px", color: "#64748b" }}>{label}</span>
+    </div>
+  );
+}
+
+function NetworkSvg({
+  companies,
+  hiddenCount,
+  currentCompanyNumber,
+  directorName,
+}: {
+  companies: any[];
+  hiddenCount: number;
+  currentCompanyNumber: string;
+  directorName: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [svgW, setSvgW] = useState(500);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setSvgW(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w > 0) setSvgW(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const H = 360;
+  const cx = svgW / 2;
+  const cy = H / 2;
+  const CR = 26;
+  const NR = 18;
+  const RADIUS = Math.min(cx * 0.58, cy * 0.58, 128);
+  const n = companies.length;
+  const initials = getInitials(directorName);
+
+  return (
+    <div ref={ref} style={{ flex: 1 }}>
+      <svg width={svgW} height={H} style={{ display: "block" }}>
+        {companies.map((appt, i) => {
+          const angle = (2 * Math.PI * i) / Math.max(n, 1) - Math.PI / 2;
+          const nx = cx + RADIUS * Math.cos(angle);
+          const ny = cy + RADIUS * Math.sin(angle);
+          const dx = nx - cx;
+          const dy = ny - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const ax = cx + (dx / dist) * CR;
+          const ay = cy + (dy / dist) * CR;
+          const bx = nx - (dx / dist) * NR;
+          const by = ny - (dy / dist) * NR;
+
+          const status = appt.appointed_to?.company_status ?? "unknown";
+          const isCurrent = !!(appt.isCurrent || appt.appointed_to?.company_number === currentCompanyNumber);
+          const isActive = !isCurrent && status === "active";
+          const isDissolved = status === "dissolved";
+
+          const stroke = isCurrent ? "#d97706" : isActive ? "#059669" : isDissolved ? "#dc2626" : "#94a3b8";
+          const fill = isCurrent
+            ? "rgba(217,119,6,0.07)"
+            : isActive
+            ? "rgba(5,150,105,0.07)"
+            : isDissolved
+            ? "rgba(220,38,38,0.07)"
+            : "#f8fafc";
+
+          const compNum = appt.appointed_to?.company_number;
+          const rawName = appt.appointed_to?.company_name ?? "Unknown";
+          const name = toTitleCase(rawName);
+          const truncName = name.length > 20 ? name.slice(0, 19) + "…" : name;
+
+          const labelDist = NR + 14;
+          const lx = nx + (dx / dist) * labelDist;
+          const ly = ny + (dy / dist) * labelDist;
+          const anchor: "start" | "middle" | "end" =
+            Math.abs(dx) > Math.abs(dy) * 1.5 ? (dx > 0 ? "start" : "end") : "middle";
+
+          return (
+            <g key={i}>
+              <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#e2e8f0" strokeWidth={1.5} />
+              <g
+                style={{ cursor: compNum ? "pointer" : "default" }}
+                onClick={() => { if (compNum) window.location.href = `/company/${compNum}`; }}
+              >
+                <circle cx={nx} cy={ny} r={NR + 8} fill="transparent" />
+                <circle cx={nx} cy={ny} r={NR} fill={fill} stroke={stroke} strokeWidth={2.5} />
+                <text
+                  x={lx} y={ly} textAnchor={anchor}
+                  fontSize="9" fontWeight="500" fill="#475569"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {truncName}
+                </text>
+              </g>
+            </g>
+          );
+        })}
+        <circle cx={cx} cy={cy} r={CR} fill="#4f46e5" />
+        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>
+          {initials}
+        </text>
+        {hiddenCount > 0 && (
+          <text x={cx} y={H - 10} textAnchor="middle" fontSize="11" fill="#94a3b8">
+            +{hiddenCount} more not shown
+          </text>
+        )}
+      </svg>
+    </div>
+  );
+}
+
+function DirectorNetworkTabContent({
+  company,
+  officers,
+  networkData,
+  networkLoading,
+}: {
+  company: any;
+  officers: any[];
+  networkData: Record<string, any[]>;
+  networkLoading: boolean;
+}) {
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
+  if (networkLoading) {
+    return (
+      <div style={{ ...CARD, height: "400px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: "13px", color: "#94a3b8" }}>Loading director network…</span>
+      </div>
+    );
+  }
+
+  if (officers.length === 0) {
+    return (
+      <div style={{ ...CARD, padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+        No officers found
+      </div>
+    );
+  }
+
+  const clampedIdx = Math.min(selectedIdx, officers.length - 1);
+  const selectedOfficer = officers[clampedIdx];
+  const allAppts = networkData[selectedOfficer.name] ?? [];
+  const activeAppts = allAppts.filter((a: any) => !a.resigned_on);
+  const otherAppts = activeAppts.filter(
+    (a: any) => a.appointed_to?.company_number !== company.company_number
+  );
+  const sortedOthers = [...otherAppts].sort((a: any, b: any) => {
+    if (a.appointed_to?.company_status === "active" && b.appointed_to?.company_status !== "active") return -1;
+    if (b.appointed_to?.company_status === "active" && a.appointed_to?.company_status !== "active") return 1;
+    return 0;
+  });
+  const svgCompanies: any[] = [
+    {
+      isCurrent: true,
+      appointed_to: {
+        company_name: company.company_name,
+        company_number: company.company_number,
+        company_status: company.company_status ?? "active",
+      },
+    },
+    ...sortedOthers.slice(0, 11),
+  ];
+  const hiddenCount = Math.max(0, sortedOthers.length - 11);
+
+  // Shared connections: other current-company officers who also appear in the selected director's network
+  const networkCompanyNums = new Set(
+    sortedOthers.map((a: any) => a.appointed_to?.company_number).filter(Boolean)
+  );
+  const sharedConnections: Array<{
+    officer: any;
+    role: string;
+    sharedCompanies: Array<{ name: string; number: string }>;
+  }> = [];
+  for (const officer of officers) {
+    if (officer.name === selectedOfficer.name) continue;
+    const appts = networkData[officer.name] ?? [];
+    const shared = appts.filter(
+      (a: any) => networkCompanyNums.has(a.appointed_to?.company_number) && !a.resigned_on
+    );
+    if (shared.length > 0) {
+      sharedConnections.push({
+        officer,
+        role: (officer.officer_role ?? "director").replace(/-/g, " "),
+        sharedCompanies: shared.map((a: any) => ({
+          name: a.appointed_to?.company_name ?? "Unknown",
+          number: a.appointed_to?.company_number ?? "",
+        })),
+      });
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* Split panel */}
+      <div style={{
+        display: "flex",
+        backgroundColor: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
+      }}>
+        {/* Left 40%: director list */}
+        <div style={{ width: "40%", borderRight: "1px solid #e2e8f0", overflowY: "auto", maxHeight: "540px" }}>
+          <div style={{
+            padding: "13px 16px", borderBottom: "1px solid #e2e8f0",
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 1,
+          }}>
+            <span style={CARD_TITLE}>Directors &amp; Officers</span>
+            <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
+              {officers.length} current
+            </span>
+          </div>
+          {officers.map((officer: any, i: number) => {
+            const appts = networkData[officer.name] ?? [];
+            const total = appts.filter((a: any) => !a.resigned_on).length;
+            const dissolved = appts.filter(
+              (a: any) => !a.resigned_on && a.appointed_to?.company_status === "dissolved"
+            ).length;
+            const isSelected = i === clampedIdx;
+            const name = toTitleCase(officer.name ?? "Unknown");
+            const initials = getInitials(officer.name ?? "?");
+            const role = (officer.officer_role ?? "officer").replace(/-/g, " ");
+            const countPill =
+              total < 5
+                ? { color: "#2563eb", bg: "rgba(59,130,246,0.10)", border: "rgba(59,130,246,0.25)" }
+                : total <= 15
+                ? { color: "#d97706", bg: "rgba(217,119,6,0.10)", border: "rgba(217,119,6,0.25)" }
+                : { color: "#dc2626", bg: "rgba(220,38,38,0.10)", border: "rgba(220,38,38,0.25)" };
+
+            return (
+              <div
+                key={`${officer.name}-${i}`}
+                onClick={() => setSelectedIdx(i)}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: "11px",
+                  padding: "13px 16px",
+                  borderBottom: i < officers.length - 1 ? "1px solid #f1f5f9" : "none",
+                  borderLeft: isSelected ? "3px solid #4f46e5" : "3px solid transparent",
+                  backgroundColor: isSelected ? "rgba(79,70,229,0.04)" : "transparent",
+                  cursor: "pointer", transition: "background-color 0.12s",
+                }}
+              >
+                <div style={{
+                  width: "34px", height: "34px", borderRadius: "50%",
+                  backgroundColor: "#4f46e5", color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "11px", fontWeight: "700", flexShrink: 0, letterSpacing: "0.02em",
+                }}>
+                  {initials}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "2px",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {name}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "capitalize", marginBottom: "6px" }}>
+                    {role}{officer.appointed_on && <> &middot; {fmtDate(officer.appointed_on)}</>}
+                  </div>
+                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                    {total > 0 && (
+                      <span style={{
+                        fontSize: "10px", fontWeight: "600", padding: "1px 7px", borderRadius: "100px",
+                        color: countPill.color, backgroundColor: countPill.bg, border: `1px solid ${countPill.border}`,
+                      }}>
+                        {total} compan{total === 1 ? "y" : "ies"}
+                      </span>
+                    )}
+                    {dissolved > 0 && (
+                      <span style={{
+                        fontSize: "10px", fontWeight: "600", padding: "1px 7px", borderRadius: "100px",
+                        color: "#dc2626", backgroundColor: "rgba(220,38,38,0.10)", border: "1px solid rgba(220,38,38,0.25)",
+                      }}>
+                        &#9888; {dissolved} dissolved
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Right 60%: network diagram */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <div style={{ padding: "13px 18px", borderBottom: "1px solid #e2e8f0" }}>
+            <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
+              {toTitleCase(selectedOfficer.name ?? "")}
+            </div>
+            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              {activeAppts.length} active appointment{activeAppts.length !== 1 ? "s" : ""}
+              {otherAppts.length > 0 && (
+                <> &middot; {otherAppts.length} other compan{otherAppts.length === 1 ? "y" : "ies"}</>
+              )}
+            </div>
+          </div>
+          <NetworkSvg
+            companies={svgCompanies}
+            hiddenCount={hiddenCount}
+            currentCompanyNumber={company.company_number}
+            directorName={toTitleCase(selectedOfficer.name ?? "")}
+          />
+          <div style={{ display: "flex", gap: "16px", padding: "10px 18px", borderTop: "1px solid #f1f5f9", flexWrap: "wrap" }}>
+            <LegendItem color="#059669" bgColor="rgba(5,150,105,0.07)" label="Active" />
+            <LegendItem color="#dc2626" bgColor="rgba(220,38,38,0.07)" label="Dissolved" />
+            <LegendItem color="#d97706" bgColor="rgba(217,119,6,0.07)" label="Current company" />
+            <LegendItem color="#94a3b8" bgColor="#f8fafc" label="Other status" />
+          </div>
+        </div>
+      </div>
+
+      {/* Shared connections table */}
+      {sharedConnections.length > 0 && (
+        <div style={CARD}>
+          <div style={CARD_HEADER}>
+            <span style={CARD_TITLE}>Shared Connections</span>
+            <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>Layer 2 cross-reference</span>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ backgroundColor: "#f8fafc" }}>
+                {["Director", "Shared Between", "Role"].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      padding: "10px 18px", textAlign: "left",
+                      fontSize: "10px", fontWeight: "600", color: "#94a3b8",
+                      textTransform: "uppercase", letterSpacing: "0.07em",
+                      borderBottom: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sharedConnections.map(({ officer, role, sharedCompanies }, i) => (
+                <tr key={i} style={{ borderBottom: i < sharedConnections.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+                  <td style={{ padding: "12px 18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <div style={{
+                        width: "28px", height: "28px", borderRadius: "50%",
+                        backgroundColor: "#4f46e5", color: "#fff",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "10px", fontWeight: "700", flexShrink: 0,
+                      }}>
+                        {getInitials(officer.name ?? "?")}
+                      </div>
+                      <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
+                        {toTitleCase(officer.name ?? "")}
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 18px" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                      {sharedCompanies.map(({ name, number }, j) => (
+                        <a
+                          key={j}
+                          href={`/company/${number}`}
+                          style={{
+                            fontSize: "12px", color: "#4f46e5", fontWeight: "500",
+                            textDecoration: "none", padding: "2px 8px", borderRadius: "6px",
+                            backgroundColor: "rgba(79,70,229,0.06)", border: "1px solid rgba(79,70,229,0.15)",
+                          }}
+                        >
+                          {toTitleCase(name)}
+                        </a>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 18px", fontSize: "12px", color: "#64748b", textTransform: "capitalize" }}>
+                    {role}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1528,23 +1938,12 @@ export default function CompanyPageClient({
 
           {/* Director network tab */}
           {activeTab === "director-network" && (
-            <div style={CARD}>
-              <div style={CARD_HEADER}>
-                <span style={CARD_TITLE}>Director Network</span>
-                <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
-                  Layer 2 cross-reference
-                </span>
-              </div>
-              {appointments.length === 0 ? (
-                <div style={{ padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
-                  No director appointment data available
-                </div>
-              ) : (
-                <div style={{ padding: "16px 18px", fontSize: "13px", color: "#475569" }}>
-                  Director network data available — {appointments.length} officer{appointments.length !== 1 ? "s" : ""} with appointment data
-                </div>
-              )}
-            </div>
+            <DirectorNetworkTabContent
+              company={company}
+              officers={officers}
+              networkData={networkData}
+              networkLoading={networkLoading}
+            />
           )}
         </div>
 
