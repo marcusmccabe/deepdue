@@ -415,19 +415,23 @@ export default function AIAnalysisCard({ companyNumber }: Props) {
     <Pill label="✓ Analysis complete" color="#059669" bg="rgba(5,150,105,0.08)" />
   );
 
-  const headerBadge =
+  const providerPill =
     analysis.provider === "gemini" ? (
-      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-        {statusBadge}
-        <Pill
-          label="Analysed by Gemini"
-          color="#475569"
-          bg="rgba(100,116,139,0.10)"
-        />
-      </span>
-    ) : (
-      statusBadge
-    );
+      <Pill label="Analysed by Gemini" color="#475569" bg="rgba(100,116,139,0.10)" />
+    ) : analysis.provider === "mistral" ? (
+      <Pill label="Analysed by Mistral" color="#c2410c" bg="rgba(234,88,12,0.10)" />
+    ) : analysis.provider === "google-docai" ? (
+      <Pill label="OCR + AI Analysis" color="#1d4ed8" bg="rgba(29,78,216,0.10)" />
+    ) : null;
+
+  const headerBadge = providerPill ? (
+    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+      {statusBadge}
+      {providerPill}
+    </span>
+  ) : (
+    statusBadge
+  );
 
   return (
     <div style={CARD}>
