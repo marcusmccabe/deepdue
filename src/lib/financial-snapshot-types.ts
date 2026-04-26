@@ -29,6 +29,7 @@ export interface DataLedgerFinancials {
   turnover: number | null;
   profitLoss: number | null;
   debtToEquity: number | null;
+  verified?: boolean;
 }
 
 export interface DataLedgerData {
@@ -42,6 +43,8 @@ export interface DataLedgerData {
   accountsNextDueDate: string | null;
   currentYearFinancials: DataLedgerFinancials;
   previousYearFinancials: Partial<DataLedgerFinancials>;
+  assetsGrowthRate?: number | null;
+  netAssetsGrowthRate?: number | null;
 }
 
 export type DataLedgerResponse = DataLedgerData | { found: false };

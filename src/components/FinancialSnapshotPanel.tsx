@@ -26,6 +26,12 @@ function formatRatio(value: number | null): string {
   return value.toFixed(2) + "x";
 }
 
+function formatGrowthRate(value: number | null): string {
+  if (value === null) return "—";
+  const pct = (value * 100).toFixed(1);
+  return `${Number(pct) >= 0 ? "+" : ""}${pct}%`;
+}
+
 function formatEmployees(value: number | null): string {
   if (value === null) return "—";
   return Math.round(value).toLocaleString("en-GB");
@@ -387,9 +393,16 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
 
   const showEmployees = data.averageNumberEmployeesDuringPeriod !== null;
   const showDebtToEquity = cur.debtToEquity !== null;
+  const showAssetsGrowth = data.assetsGrowthRate != null;
+  const showNetAssetsGrowth = data.netAssetsGrowthRate != null;
 
   const colCount = hasPrev ? 2 : 1;
-  const totalRows = rows.length + (showEmployees ? 1 : 0) + (showDebtToEquity ? 1 : 0);
+  const totalRows =
+    rows.length +
+    (showEmployees ? 1 : 0) +
+    (showDebtToEquity ? 1 : 0) +
+    (showAssetsGrowth ? 1 : 0) +
+    (showNetAssetsGrowth ? 1 : 0);
 
   return (
     <div style={CARD}>
@@ -471,6 +484,23 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
             >
               Latest
             </span>
+            {cur.verified && (
+              <span
+                style={{
+                  fontSize: "9px",
+                  fontWeight: "600",
+                  color: "#059669",
+                  backgroundColor: "rgba(5,150,105,0.10)",
+                  border: "1px solid rgba(5,150,105,0.25)",
+                  padding: "1px 5px",
+                  borderRadius: "4px",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Verified
+              </span>
+            )}
           </div>
           {data.accountsLastMadeUpDate && (
             <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "1px" }}>
@@ -522,6 +552,28 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
           current={cur.debtToEquity}
           previous={undefined}
           formatter={formatRatio}
+          hasPrev={hasPrev}
+          isLast={!showAssetsGrowth && !showNetAssetsGrowth}
+        />
+      )}
+
+      {showAssetsGrowth && (
+        <DLMetricRow
+          label="Assets Growth"
+          current={data.assetsGrowthRate ?? null}
+          previous={undefined}
+          formatter={formatGrowthRate}
+          hasPrev={hasPrev}
+          isLast={!showNetAssetsGrowth}
+        />
+      )}
+
+      {showNetAssetsGrowth && (
+        <DLMetricRow
+          label="Net Assets Growth"
+          current={data.netAssetsGrowthRate ?? null}
+          previous={undefined}
+          formatter={formatGrowthRate}
           hasPrev={hasPrev}
           isLast
         />
