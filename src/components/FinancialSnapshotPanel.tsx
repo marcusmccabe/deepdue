@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { FinancialSnapshot, FinancialYear } from "@/lib/financial-snapshot-types";
+import type {
+  FinancialSnapshot,
+  FinancialYear,
+  DataLedgerData,
+  DataLedgerFinancials,
+} from "@/lib/financial-snapshot-types";
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 
@@ -12,11 +17,21 @@ function formatCurrency(value: number | null): string {
   if (abs >= 1_000_000_000)
     return `${prefix}£${(abs / 1_000_000_000).toFixed(1)}bn`;
   if (abs >= 1_000_000) return `${prefix}£${(abs / 1_000_000).toFixed(1)}m`;
-  if (abs >= 1_000) return `${prefix}£${Math.round(abs / 1_000)}k`;
+  if (abs >= 1_000) return `${prefix}£${Math.round(abs / 1_000).toLocaleString("en-GB")}k`;
   return `${prefix}£${Math.round(abs).toLocaleString("en-GB")}`;
 }
 
-function formatPeriodEnd(iso: string): string {
+function formatRatio(value: number | null): string {
+  if (value === null) return "—";
+  return value.toFixed(2) + "x";
+}
+
+function formatEmployees(value: number | null): string {
+  if (value === null) return "—";
+  return Math.round(value).toLocaleString("en-GB");
+}
+
+function formatPeriodEnd(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString("en-GB", {
@@ -40,7 +55,7 @@ function yoyChange(
   return { label, positive };
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Shared styles ─────────────────────────────────────────────────────────────
 
 const CARD: React.CSSProperties = {
   backgroundColor: "#ffffff",
@@ -49,6 +64,8 @@ const CARD: React.CSSProperties = {
   boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
   overflow: "hidden",
 };
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function SkeletonBlock({ w, h }: { w: string; h: string }) {
   return (
@@ -101,6 +118,8 @@ function LoadingSkeleton() {
   );
 }
 
+// ── No-data card ──────────────────────────────────────────────────────────────
+
 function NoDataCard({ companyNumber }: { companyNumber: string }) {
   return (
     <div style={CARD}>
@@ -129,7 +148,7 @@ function NoDataCard({ companyNumber }: { companyNumber: string }) {
             textTransform: "uppercase",
           }}
         >
-          iXBRL · No data
+          No data
         </span>
       </div>
       <div style={{ padding: "28px 18px" }}>
@@ -149,7 +168,7 @@ function NoDataCard({ companyNumber }: { companyNumber: string }) {
               marginBottom: "6px",
             }}
           >
-            Structured data not available for this company
+            Structured data not available — use AI Analysis
           </div>
           <div
             style={{ fontSize: "12px", color: "#475569", lineHeight: "1.7" }}
@@ -178,8 +197,9 @@ function NoDataCard({ companyNumber }: { companyNumber: string }) {
   );
 }
 
-// Metric row in the multi-year table
-function MetricRow({
+// ── iXBRL metric row (multi-year table) ───────────────────────────────────────
+
+function IxbrlMetricRow({
   label,
   years,
   getValue,
@@ -201,7 +221,6 @@ function MetricRow({
         gap: "8px",
       }}
     >
-      {/* Metric label */}
       <span
         style={{
           fontSize: "13px",
@@ -213,7 +232,6 @@ function MetricRow({
         {label}
       </span>
 
-      {/* Value per year */}
       {years.map((yr, i) => {
         const current = getValue(yr);
         const prior = i + 1 < years.length ? getValue(years[i + 1]) : null;
@@ -252,109 +270,305 @@ function MetricRow({
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── DataLedger metric row (two-column: current / previous) ────────────────────
 
-export default function FinancialSnapshotPanel({
-  companyNumber,
+function DLMetricRow({
+  label,
+  current,
+  previous,
+  formatter = formatCurrency,
+  hasPrev,
+  isLast = false,
 }: {
-  companyNumber: string;
+  label: string;
+  current: number | null;
+  previous: number | null | undefined;
+  formatter?: (v: number | null) => string;
+  hasPrev: boolean;
+  isLast?: boolean;
 }) {
-  const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading"
-  );
-  const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
+  const prevVal = hasPrev ? (previous ?? null) : null;
+  const change = formatter === formatCurrency ? yoyChange(current, prevVal) : null;
+  const isNegative = current !== null && current < 0;
 
-  useEffect(() => {
-    let cancelled = false;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: hasPrev ? "180px 1fr 1fr" : "180px 1fr",
+        alignItems: "start",
+        padding: "14px 18px",
+        borderBottom: isLast ? "none" : "1px solid #f1f5f9",
+        gap: "8px",
+      }}
+    >
+      <span
+        style={{
+          fontSize: "13px",
+          color: "#475569",
+          paddingTop: "2px",
+          fontWeight: "500",
+        }}
+      >
+        {label}
+      </span>
 
-    async function load() {
-      try {
-        const res = await fetch(
-          `/api/financial-snapshot?companyNumber=${encodeURIComponent(companyNumber)}`
-        );
-        if (cancelled) return;
-
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          setErrorMsg(
-            (d as { error?: string }).error ?? `HTTP ${res.status}`
-          );
-          setStatus("error");
-          return;
-        }
-
-        const data: FinancialSnapshot = await res.json();
-        setSnapshot(data);
-        setStatus("success");
-      } catch (err) {
-        if (!cancelled) {
-          setErrorMsg(String(err));
-          setStatus("error");
-        }
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyNumber]);
-
-  if (status === "loading") return <LoadingSkeleton />;
-
-  if (status === "error") {
-    return (
-      <div style={CARD}>
-        <div
+      {/* Current year */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+        <span
           style={{
-            padding: "15px 18px",
-            borderBottom: "1px solid #e2e8f0",
-            fontSize: "13px",
+            fontSize: "15px",
             fontWeight: "700",
-            color: "#0f172a",
+            color: isNegative ? "#dc2626" : "#0f172a",
           }}
         >
-          Financial Snapshot
-        </div>
-        <div style={{ padding: "18px" }}>
-          <div
+          {formatter(current)}
+        </span>
+        {change && (
+          <span
             style={{
-              borderLeft: "3px solid #dc2626",
-              backgroundColor: "rgba(220,38,38,0.05)",
-              borderRadius: "0 8px 8px 0",
-              padding: "12px 16px",
+              fontSize: "11px",
+              fontWeight: "600",
+              color: change.positive ? "#059669" : "#dc2626",
+              display: "flex",
+              alignItems: "center",
+              gap: "2px",
             }}
           >
-            <div
+            {change.positive ? "▲" : "▼"} {change.label}
+          </span>
+        )}
+      </div>
+
+      {/* Previous year */}
+      {hasPrev && (
+        <div>
+          <span
+            style={{
+              fontSize: "15px",
+              fontWeight: "700",
+              color: "#64748b",
+            }}
+          >
+            {formatter(prevVal)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── DataLedger panel ──────────────────────────────────────────────────────────
+
+function DataLedgerPanel({ data }: { data: DataLedgerData }) {
+  const cur = data.currentYearFinancials;
+  const prev = data.previousYearFinancials as Partial<DataLedgerFinancials>;
+
+  // Determine if we have any previous year data to show
+  const hasPrev = Object.values(prev).some((v) => v !== null && v !== undefined);
+
+  // Only show rows where at least the current value is non-null
+  const rows: Array<{
+    label: string;
+    current: number | null;
+    previous: number | null | undefined;
+    formatter?: (v: number | null) => string;
+  }> = [
+    { label: "Total Assets", current: cur.totalAssets, previous: prev.totalAssets },
+    { label: "Total Liabilities", current: cur.totalLiabilities, previous: prev.totalLiabilities },
+    { label: "Net Assets / Equity", current: cur.equity, previous: prev.equity },
+    { label: "Current Assets", current: cur.currentAssets, previous: prev.currentAssets },
+    { label: "Fixed Assets", current: cur.fixedAssets, previous: prev.fixedAssets },
+    { label: "Current Liabilities", current: cur.currentLiabilities, previous: prev.currentLiabilities },
+    { label: "Cash", current: cur.cash, previous: prev.cash },
+    { label: "Turnover", current: cur.turnover, previous: prev.turnover },
+    { label: "Profit / Loss", current: cur.profitLoss, previous: prev.profitLoss },
+  ].filter((r) => r.current !== null);
+
+  const showEmployees = data.averageNumberEmployeesDuringPeriod !== null;
+  const showDebtToEquity = cur.debtToEquity !== null;
+
+  const colCount = hasPrev ? 2 : 1;
+  const totalRows = rows.length + (showEmployees ? 1 : 0) + (showDebtToEquity ? 1 : 0);
+
+  return (
+    <div style={CARD}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "15px 18px",
+          borderBottom: "1px solid #e2e8f0",
+        }}
+      >
+        <div>
+          <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
+            Financial Snapshot
+          </span>
+          <span style={{ marginLeft: "10px", fontSize: "11px", color: "#94a3b8" }}>
+            Structured financial data
+          </span>
+        </div>
+        <span
+          style={{
+            fontSize: "10px",
+            fontWeight: "600",
+            color: "#0891b2",
+            backgroundColor: "rgba(8,145,178,0.08)",
+            border: "1px solid rgba(8,145,178,0.20)",
+            padding: "2px 8px",
+            borderRadius: "100px",
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+          }}
+        >
+          DataLedger
+        </span>
+      </div>
+
+      {/* Year column headers */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: hasPrev ? "180px 1fr 1fr" : "180px 1fr",
+          padding: "10px 18px 6px",
+          backgroundColor: "#f8fafc",
+          borderBottom: "1px solid #e2e8f0",
+          gap: "8px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "10px",
+            fontWeight: "700",
+            color: "#94a3b8",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          Metric
+        </span>
+
+        {/* Current year */}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a" }}>
+              Current Year
+            </span>
+            <span
               style={{
-                fontSize: "13px",
+                fontSize: "9px",
                 fontWeight: "600",
-                color: "#0f172a",
-                marginBottom: "4px",
+                color: "#0891b2",
+                backgroundColor: "rgba(8,145,178,0.08)",
+                padding: "1px 5px",
+                borderRadius: "4px",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
               }}
             >
-              Failed to load structured data
-            </div>
-            <div style={{ fontSize: "12px", color: "#475569" }}>
-              {errorMsg || "An unexpected error occurred."}
-            </div>
+              Latest
+            </span>
           </div>
+          {data.accountsLastMadeUpDate && (
+            <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "1px" }}>
+              {formatPeriodEnd(data.accountsLastMadeUpDate)}
+            </div>
+          )}
         </div>
+
+        {/* Previous year */}
+        {hasPrev && (
+          <div>
+            <span style={{ fontSize: "12px", fontWeight: "700", color: "#64748b" }}>
+              Previous Year
+            </span>
+          </div>
+        )}
       </div>
-    );
-  }
 
-  if (!snapshot || snapshot.source === "none" || snapshot.years.length === 0) {
-    return <NoDataCard companyNumber={companyNumber} />;
-  }
+      {/* Metric rows */}
+      {rows.map((r, i) => {
+        const isLast =
+          i === rows.length - 1 && !showEmployees && !showDebtToEquity;
+        return (
+          <DLMetricRow
+            key={r.label}
+            label={r.label}
+            current={r.current}
+            previous={r.previous}
+            hasPrev={hasPrev}
+            isLast={isLast}
+          />
+        );
+      })}
 
-  // Filter to years that have at least one figure
+      {showEmployees && (
+        <DLMetricRow
+          label="Employees (avg)"
+          current={data.averageNumberEmployeesDuringPeriod}
+          previous={undefined}
+          formatter={formatEmployees}
+          hasPrev={hasPrev}
+          isLast={!showDebtToEquity}
+        />
+      )}
+
+      {showDebtToEquity && (
+        <DLMetricRow
+          label="Debt-to-Equity"
+          current={cur.debtToEquity}
+          previous={undefined}
+          formatter={formatRatio}
+          hasPrev={hasPrev}
+          isLast
+        />
+      )}
+
+      {totalRows === 0 && (
+        <div style={{ padding: "18px", fontSize: "13px", color: "#94a3b8" }}>
+          No financial figures available.
+        </div>
+      )}
+
+      {/* Footer */}
+      <div
+        style={{
+          padding: "10px 18px",
+          borderTop: "1px solid #f1f5f9",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "8px",
+        }}
+      >
+        <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+          {data.isActive ? "Active company" : "Inactive company"}
+          {data.incorporationDate
+            ? ` · incorporated ${formatPeriodEnd(data.incorporationDate)}`
+            : ""}
+        </span>
+        <span style={{ fontSize: "11px", color: "#cbd5e1" }}>
+          Data: DataLedger
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── iXBRL panel ───────────────────────────────────────────────────────────────
+
+function IxbrlPanel({
+  snapshot,
+  fallback,
+}: {
+  snapshot: FinancialSnapshot;
+  fallback: boolean;
+}) {
   const dataYears = snapshot.years.filter((y) => y.hasData);
-  if (dataYears.length === 0) {
-    return <NoDataCard companyNumber={companyNumber} />;
-  }
-
   const colCount = dataYears.length;
   const sourceLabel = snapshot.cached ? "iXBRL · cached" : "iXBRL";
 
@@ -371,19 +585,13 @@ export default function FinancialSnapshotPanel({
         }}
       >
         <div>
-          <span
-            style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}
-          >
+          <span style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
             Financial Snapshot
           </span>
-          <span
-            style={{
-              marginLeft: "10px",
-              fontSize: "11px",
-              color: "#94a3b8",
-            }}
-          >
-            Sourced from iXBRL-tagged annual accounts
+          <span style={{ marginLeft: "10px", fontSize: "11px", color: "#94a3b8" }}>
+            {fallback
+              ? "Structured data not available — sourced from iXBRL accounts"
+              : "Sourced from iXBRL-tagged annual accounts"}
           </span>
         </div>
         <span
@@ -461,27 +669,11 @@ export default function FinancialSnapshotPanel({
       </div>
 
       {/* Metric rows */}
-      <MetricRow
-        label="Turnover / Revenue"
-        years={dataYears}
-        getValue={(y) => y.turnover}
-      />
-      <MetricRow
-        label="Operating Profit"
-        years={dataYears}
-        getValue={(y) => y.operatingProfit}
-      />
-      <MetricRow
-        label="Net Assets"
-        years={dataYears}
-        getValue={(y) => y.netAssets}
-      />
-      <MetricRow
-        label="Cash at Bank"
-        years={dataYears}
-        getValue={(y) => y.cashAtBank}
-      />
-      <MetricRow
+      <IxbrlMetricRow label="Turnover / Revenue" years={dataYears} getValue={(y) => y.turnover} />
+      <IxbrlMetricRow label="Operating Profit" years={dataYears} getValue={(y) => y.operatingProfit} />
+      <IxbrlMetricRow label="Net Assets" years={dataYears} getValue={(y) => y.netAssets} />
+      <IxbrlMetricRow label="Cash at Bank" years={dataYears} getValue={(y) => y.cashAtBank} />
+      <IxbrlMetricRow
         label="Total Liabilities"
         years={dataYears}
         getValue={(y) => y.totalLiabilities}
@@ -516,4 +708,147 @@ export default function FinancialSnapshotPanel({
       </div>
     </div>
   );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export default function FinancialSnapshotPanel({
+  companyNumber,
+}: {
+  companyNumber: string;
+}) {
+  const [dlStatus, setDlStatus] = useState<"loading" | "found" | "not-found">("loading");
+  const [dlData, setDlData] = useState<DataLedgerData | null>(null);
+
+  const [ixbrlStatus, setIxbrlStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
+  const [ixbrlError, setIxbrlError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDataLedger() {
+      try {
+        const res = await fetch(
+          `/api/dataledger?companyNumber=${encodeURIComponent(companyNumber)}`
+        );
+        if (cancelled) return;
+
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (data?.found === true) {
+          setDlData(data as DataLedgerData);
+          setDlStatus("found");
+        } else {
+          setDlStatus("not-found");
+          loadIxbrl();
+        }
+      } catch {
+        if (!cancelled) {
+          setDlStatus("not-found");
+          loadIxbrl();
+        }
+      }
+    }
+
+    async function loadIxbrl() {
+      setIxbrlStatus("loading");
+      try {
+        const res = await fetch(
+          `/api/financial-snapshot?companyNumber=${encodeURIComponent(companyNumber)}`
+        );
+        if (cancelled) return;
+
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          setIxbrlError((d as { error?: string }).error ?? `HTTP ${res.status}`);
+          setIxbrlStatus("error");
+          return;
+        }
+
+        const data: FinancialSnapshot = await res.json();
+        if (cancelled) return;
+        setSnapshot(data);
+        setIxbrlStatus("success");
+      } catch (err) {
+        if (!cancelled) {
+          setIxbrlError(String(err));
+          setIxbrlStatus("error");
+        }
+      }
+    }
+
+    loadDataLedger();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyNumber]);
+
+  // ── Loading states ──────────────────────────────────────────────────────────
+
+  if (dlStatus === "loading") return <LoadingSkeleton />;
+
+  if (dlStatus === "found" && dlData) {
+    return <DataLedgerPanel data={dlData} />;
+  }
+
+  // DataLedger returned not-found → show iXBRL fallback
+
+  if (ixbrlStatus === "idle" || ixbrlStatus === "loading") return <LoadingSkeleton />;
+
+  if (ixbrlStatus === "error") {
+    return (
+      <div style={CARD}>
+        <div
+          style={{
+            padding: "15px 18px",
+            borderBottom: "1px solid #e2e8f0",
+            fontSize: "13px",
+            fontWeight: "700",
+            color: "#0f172a",
+          }}
+        >
+          Financial Snapshot
+        </div>
+        <div style={{ padding: "18px" }}>
+          <div
+            style={{
+              borderLeft: "3px solid #dc2626",
+              backgroundColor: "rgba(220,38,38,0.05)",
+              borderRadius: "0 8px 8px 0",
+              padding: "12px 16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: "600",
+                color: "#0f172a",
+                marginBottom: "4px",
+              }}
+            >
+              Failed to load structured data
+            </div>
+            <div style={{ fontSize: "12px", color: "#475569" }}>
+              {ixbrlError || "An unexpected error occurred."}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ixbrlStatus === "success"
+
+  if (!snapshot || snapshot.source === "none" || snapshot.years.length === 0) {
+    return <NoDataCard companyNumber={companyNumber} />;
+  }
+
+  const dataYears = snapshot.years.filter((y) => y.hasData);
+  if (dataYears.length === 0) {
+    return <NoDataCard companyNumber={companyNumber} />;
+  }
+
+  return <IxbrlPanel snapshot={snapshot} fallback />;
 }
