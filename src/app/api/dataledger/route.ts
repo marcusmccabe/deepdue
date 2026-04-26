@@ -25,10 +25,10 @@ function extractCurrentFinancials(src: Record<string, unknown>): DataLedgerFinan
     fixedAssets: n(src.cCalculatedTotalFixedAssets),
     currentLiabilities: null,
     cash: null,
-    turnover: null,
+    turnover: n(src.cTurnoverRevenue),
     profitLoss: n(src.cProfitLoss),
     debtToEquity: n(src.cDebtToEquityRatio),
-    verified: src.cVerified === true,
+    verified: src.cVerified === "true",
   };
 }
 
@@ -39,9 +39,10 @@ function extractPreviousFinancials(src: Record<string, unknown>): Partial<DataLe
     equity: n(src.pCalculatedEquity),
     currentAssets: n(src.pCalculatedTotalCurrentAssets),
     fixedAssets: n(src.pCalculatedTotalFixedAssets),
+    turnover: n(src.pTurnoverRevenue),
     profitLoss: n(src.pProfitLoss),
     debtToEquity: n(src.pDebtToEquityRatio),
-    verified: src.pVerified === true,
+    verified: src.pVerified === "true",
   };
 }
 
@@ -81,7 +82,6 @@ export async function GET(request: NextRequest) {
 
     const rawBody = await res.text();
     console.log(`[dataledger] ${companyNumber} response status=${res.status}`);
-    console.log(`[dataledger] ${companyNumber} response body (full): ${rawBody}`);
 
     if (res.status === 404 || res.status === 204) {
       const data: DataLedgerResponse = { found: false };
@@ -95,8 +95,9 @@ export async function GET(request: NextRequest) {
     }
 
     const json = JSON.parse(rawBody) as Record<string, unknown>;
+    const fin = (json.financials ?? {}) as Record<string, unknown>;
 
-    const data: DataLedgerData & { rawData: Record<string, unknown> } = {
+    const data: DataLedgerData = {
       found: true,
       companyNumber: (json.companyNumber as string) ?? companyNumber,
       companyName: (json.companyName as string) ?? "",
@@ -106,11 +107,10 @@ export async function GET(request: NextRequest) {
         (json.averageNumberEmployeesDuringPeriod as number | null) ?? null,
       accountsLastMadeUpDate: (json.accountsLastMadeUpDate as string | null) ?? null,
       accountsNextDueDate: (json.accountsNextDueDate as string | null) ?? null,
-      currentYearFinancials: extractCurrentFinancials(json),
-      previousYearFinancials: extractPreviousFinancials(json),
-      assetsGrowthRate: n(json.assetsGrowthRate),
-      netAssetsGrowthRate: n(json.netAssetsGrowthRate),
-      rawData: json,
+      currentYearFinancials: extractCurrentFinancials(fin),
+      previousYearFinancials: extractPreviousFinancials(fin),
+      assetsGrowthRate: n(fin.assetsGrowthRate),
+      netAssetsGrowthRate: n(fin.netAssetsGrowthRate),
     };
 
     console.log(
