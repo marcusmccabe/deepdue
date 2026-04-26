@@ -12,18 +12,36 @@ const CACHE_TTL = 86_400_000; // 24 h
 
 const cache = new Map<string, { data: DataLedgerResponse; ts: number }>();
 
-function extractFinancials(src: Record<string, unknown> | null | undefined): DataLedgerFinancials {
+function n(v: unknown): number | null {
+  return typeof v === "number" ? v : null;
+}
+
+function extractCurrentFinancials(src: Record<string, unknown>): DataLedgerFinancials {
   return {
-    totalAssets: (src?.totalAssets as number | null) ?? null,
-    totalLiabilities: (src?.totalLiabilities as number | null) ?? null,
-    equity: (src?.equity as number | null) ?? null,
-    currentAssets: (src?.currentAssets as number | null) ?? null,
-    fixedAssets: (src?.fixedAssets as number | null) ?? null,
-    currentLiabilities: (src?.currentLiabilities as number | null) ?? null,
-    cash: (src?.cash as number | null) ?? null,
-    turnover: (src?.turnover as number | null) ?? null,
-    profitLoss: (src?.profitLoss as number | null) ?? null,
-    debtToEquity: (src?.debtToEquity as number | null) ?? null,
+    totalAssets: n(src.cCalculatedTotalAssets),
+    totalLiabilities: n(src.cCalculatedTotalLiabilities),
+    equity: n(src.cCalculatedEquity),
+    currentAssets: n(src.cCalculatedTotalCurrentAssets),
+    fixedAssets: n(src.cCalculatedTotalFixedAssets),
+    currentLiabilities: null,
+    cash: null,
+    turnover: null,
+    profitLoss: n(src.cProfitLoss),
+    debtToEquity: n(src.cDebtToEquityRatio),
+    verified: src.cVerified === true,
+  };
+}
+
+function extractPreviousFinancials(src: Record<string, unknown>): Partial<DataLedgerFinancials> {
+  return {
+    totalAssets: n(src.pCalculatedTotalAssets),
+    totalLiabilities: n(src.pCalculatedTotalLiabilities),
+    equity: n(src.pCalculatedEquity),
+    currentAssets: n(src.pCalculatedTotalCurrentAssets),
+    fixedAssets: n(src.pCalculatedTotalFixedAssets),
+    profitLoss: n(src.pProfitLoss),
+    debtToEquity: n(src.pDebtToEquityRatio),
+    verified: src.pVerified === true,
   };
 }
 
@@ -88,16 +106,14 @@ export async function GET(request: NextRequest) {
         (json.averageNumberEmployeesDuringPeriod as number | null) ?? null,
       accountsLastMadeUpDate: (json.accountsLastMadeUpDate as string | null) ?? null,
       accountsNextDueDate: (json.accountsNextDueDate as string | null) ?? null,
-      currentYearFinancials: extractFinancials(
-        json.currentYearFinancials as Record<string, unknown> | null
-      ),
-      previousYearFinancials: extractFinancials(
-        json.previousYearFinancials as Record<string, unknown> | null
-      ),
+      currentYearFinancials: extractCurrentFinancials(json),
+      previousYearFinancials: extractPreviousFinancials(json),
+      assetsGrowthRate: n(json.assetsGrowthRate),
+      netAssetsGrowthRate: n(json.netAssetsGrowthRate),
     };
 
     console.log(
-      `[dataledger] ${companyNumber} ok — totalAssets=${data.currentYearFinancials.totalAssets} equity=${data.currentYearFinancials.equity} turnover=${data.currentYearFinancials.turnover}`
+      `[dataledger] ${companyNumber} ok — totalAssets=${data.currentYearFinancials.totalAssets} equity=${data.currentYearFinancials.equity} verified=${data.currentYearFinancials.verified} assetsGrowthRate=${data.assetsGrowthRate}`
     );
 
     cache.set(companyNumber, { data, ts: Date.now() });
