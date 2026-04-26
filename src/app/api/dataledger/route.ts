@@ -54,15 +54,18 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log(`[dataledger] ${companyNumber} fetching from DataLedger API`);
-    const res = await fetch(`${DATALEDGER_BASE}/companies/${companyNumber}`, {
+    const url = `${DATALEDGER_BASE}/v1/companies/${companyNumber}`;
+    console.log(`[dataledger] ${companyNumber} fetching URL: ${url}`);
+    const res = await fetch(url, {
       headers: { "x-api-key": apiKey },
       cache: "no-store",
     });
 
+    const rawBody = await res.text();
     console.log(`[dataledger] ${companyNumber} response status=${res.status}`);
+    console.log(`[dataledger] ${companyNumber} response body (first 500): ${rawBody.slice(0, 500)}`);
 
-    if (res.status === 404 || res.status === 204 || res.status === 204) {
+    if (res.status === 404 || res.status === 204) {
       const data: DataLedgerResponse = { found: false };
       cache.set(companyNumber, { data, ts: Date.now() });
       return NextResponse.json(data);
@@ -73,7 +76,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ found: false });
     }
 
-    const json = await res.json() as Record<string, unknown>;
+    const json = JSON.parse(rawBody) as Record<string, unknown>;
 
     const data: DataLedgerData = {
       found: true,
