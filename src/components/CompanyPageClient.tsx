@@ -6,6 +6,8 @@ import CompanyTabs, { type TabId } from "@/components/CompanyTabs";
 import AIAnalysisCard from "@/components/AIAnalysisCard";
 import FinancialSnapshotPanel from "@/components/FinancialSnapshotPanel";
 import { createClient } from "@/lib/supabase/client";
+import type { DataLedgerResponse } from "@/lib/financial-snapshot-types";
+import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +103,27 @@ function getInitials(name: string): string {
   if (words.length === 0) return "?";
   if (words.length === 1) return (words[0][0] ?? "?").toUpperCase();
   return ((words[0][0] ?? "") + (words[words.length - 1][0] ?? "")).toUpperCase();
+}
+
+function fmtCurrency(n: number | null | undefined): string {
+  if (n == null) return "—";
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+  if (abs >= 1_000_000_000) return `${sign}£${(abs / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}bn`;
+  if (abs >= 1_000_000) return `${sign}£${(abs / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+  if (abs >= 1_000) return `${sign}£${(abs / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${sign}£${abs.toFixed(0)}`;
+}
+
+function yoyPct(curr: number | null | undefined, prev: number | null | undefined): number | null {
+  if (curr == null || prev == null || prev === 0) return null;
+  return ((curr - prev) / Math.abs(prev)) * 100;
+}
+
+function fmtYoy(pct: number | null): string {
+  if (pct === null) return "";
+  const sign = pct >= 0 ? "+" : "";
+  return `${sign}${pct.toFixed(1)}%`;
 }
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -1165,6 +1188,66 @@ function DirectorNetworkGraph({
   );
 }
 
+// ── Header sub-components ─────────────────────────────────────────────────────
+
+function MetaPill({ label }: { label: string }) {
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      padding: "3px 10px", borderRadius: "100px",
+      fontSize: "12px", fontWeight: "500",
+      color: "#475569", backgroundColor: "#f1f5f9",
+      border: "0.5px solid #e2e8f0", whiteSpace: "nowrap",
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function MetricCol({
+  label, value, yoyPct: pct, subtitle, wide,
+}: {
+  label: string; value: string; yoyPct?: number | null;
+  subtitle?: string; wide?: boolean;
+}) {
+  const yoyColor = pct == null ? "#94a3b8" : pct >= 0 ? "#059669" : "#dc2626";
+  const yoyStr = pct != null ? fmtYoy(pct) : null;
+  return (
+    <div style={{
+      padding: "16px 20px",
+      borderRight: "0.5px solid #e2e8f0",
+      display: "flex", flexDirection: "column", gap: "4px",
+      minWidth: 0,
+    }}>
+      <div style={{ fontSize: "10px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: "6px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: wide ? "18px" : "15px", fontWeight: "600", color: "#0f172a" }}>
+          {value}
+        </span>
+        {yoyStr && (
+          <span style={{ fontSize: "11px", fontWeight: "600", color: yoyColor }}>
+            {pct! >= 0 ? "▲" : "▼"} {yoyStr}
+          </span>
+        )}
+      </div>
+      {subtitle && (
+        <div style={{ fontSize: "11px", color: "#94a3b8" }}>{subtitle}</div>
+      )}
+    </div>
+  );
+}
+
+function SkeletonCol() {
+  return (
+    <div style={{ padding: "16px 20px", borderRight: "0.5px solid #e2e8f0", display: "flex", flexDirection: "column", gap: "6px" }}>
+      <div style={{ height: "10px", width: "60px", borderRadius: "4px", backgroundColor: "#f1f5f9" }} />
+      <div style={{ height: "18px", width: "80px", borderRadius: "4px", backgroundColor: "#e2e8f0" }} />
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CompanyPageClient({
@@ -1266,127 +1349,347 @@ export default function CompanyPageClient({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── DataLedger financial data ───────────────────────────────────────────────
+  const [dlData, setDlData] = useState<DataLedgerResponse | null>(null);
+  const [dlLoading, setDlLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDl() {
+      try {
+        const res = await fetch(`/api/dataledger?companyNumber=${encodeURIComponent(company.company_number)}`);
+        if (res.ok) setDlData(await res.json());
+      } catch { /* silently ignore */ }
+      setDlLoading(false);
+    }
+    fetchDl();
+  }, [company.company_number]);
+
+  // ── Cached AI analysis (header bar only — do not trigger new analysis) ──────
+  const [cachedAnalysis, setCachedAnalysis] = useState<AccountsAnalysis | null>(null);
+
+  useEffect(() => {
+    async function checkAnalysisCache() {
+      const supabase = createClient();
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 90);
+      const { data } = await supabase
+        .from("analysis_cache")
+        .select("analysis, cached_at")
+        .eq("company_number", company.company_number.toUpperCase())
+        .gt("cached_at", cutoff.toISOString())
+        .maybeSingle();
+      if (data?.analysis) setCachedAnalysis(data.analysis as AccountsAnalysis);
+    }
+    checkAnalysisCache();
+  }, [company.company_number]);
+
   return (
     <>
-      {/* Company header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          flexWrap: "wrap",
-          marginBottom: "16px",
-        }}
-      >
-        <h1
-          style={{
-            fontFamily:
-              'var(--font-instrument-serif), "Instrument Serif", serif',
-            fontSize: "34px",
-            fontWeight: "400",
-            color: "#0f172a",
-            lineHeight: "1.2",
-            margin: 0,
-          }}
-        >
-          {company.company_name}
-        </h1>
+      {/* ── Company header card ── */}
+      {(() => {
+        // Derive DataLedger metrics
+        const dl = dlData && dlData.found ? dlData : null;
+        const turnover = dl?.currentYearFinancials.turnover ?? null;
+        const prevTurnover = dl?.previousYearFinancials.turnover ?? null;
+        const profitLoss = dl?.currentYearFinancials.profitLoss ?? null;
+        const prevProfitLoss = dl?.previousYearFinancials.profitLoss ?? null;
+        const totalAssets = dl?.currentYearFinancials.totalAssets ?? null;
+        const netAssets = dl?.currentYearFinancials.equity ?? null;
+        const assetsGrowth = dl?.assetsGrowthRate ?? null;
+        const netAssetsGrowth = dl?.netAssetsGrowthRate ?? null;
+        const employees = dl?.averageNumberEmployeesDuringPeriod ?? null;
+        const lastAccountsDate = dl?.accountsLastMadeUpDate ?? null;
+        const nextDueDate = dl?.accountsNextDueDate ?? null;
+        const verified = dl?.currentYearFinancials.verified ?? false;
 
-        <StatusBadge status={company.company_status} />
+        const turnoverYoy = yoyPct(turnover, prevTurnover);
+        const profitYoy = yoyPct(profitLoss, prevProfitLoss);
 
-        <div style={{ flex: 1 }} />
+        // AI summary flags
+        const greenFlags: string[] = [];
+        const amberFlags: string[] = [];
+        const redFlags: string[] = [];
 
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            onClick={watchlistState === "idle" ? handleWatchlist : undefined}
-            disabled={watchlistState !== "idle"}
-            style={{
-              padding: "8px 14px",
-              borderRadius: "8px",
-              border: watchlistState === "error"
-                ? "1px solid rgba(220,38,38,0.4)"
-                : watchlistState === "done"
-                ? "1px solid rgba(5,150,105,0.3)"
-                : "1px solid #e2e8f0",
-              backgroundColor: watchlistState === "done"
-                ? "rgba(5,150,105,0.08)"
-                : watchlistState === "error"
-                ? "rgba(220,38,38,0.08)"
-                : "#ffffff",
-              color: watchlistState === "done"
-                ? "#059669"
-                : watchlistState === "error"
-                ? "#dc2626"
-                : "#475569",
-              fontSize: "13px",
-              fontWeight: watchlistState === "done" ? "600" : "500",
-              cursor: watchlistState === "idle" ? "pointer" : "default",
-              opacity: watchlistState === "checking" || watchlistState === "saving" ? 0.55 : 1,
-              transition: "all 0.15s",
-            }}
-          >
-            {watchlistState === "checking" || watchlistState === "saving"
-              ? "…"
-              : watchlistState === "done"
-              ? "✓ Watchlisted"
-              : watchlistState === "error"
-              ? "Error — retry"
-              : "+ Watchlist"}
-          </button>
-          <button
-            style={{
-              padding: "8px 14px",
-              borderRadius: "8px",
-              border: "1px solid #e2e8f0",
-              backgroundColor: "#ffffff",
-              color: "#475569",
-              fontSize: "13px",
-              fontWeight: "500",
-              cursor: "pointer",
-            }}
-          >
-            Export PDF
-          </button>
-          <button
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent("deepdue:open-chat"))
-            }
-            style={{
-              padding: "8px 14px",
-              borderRadius: "8px",
-              border: "none",
-              backgroundColor: "#4f46e5",
-              color: "#ffffff",
-              fontSize: "13px",
-              fontWeight: "600",
-              cursor: "pointer",
-            }}
-          >
-            Ask AI
-          </button>
-        </div>
-          {watchlistErrorMsg && (
+        if (verified) greenFlags.push("Verified accounts");
+        if (charges.length === 0) greenFlags.push("No charges");
+        if (cachedAnalysis?.auditOpinion?.opinion === "Clean") greenFlags.push("Clean audit");
+
+        if (cachedAnalysis) {
+          const gc = cachedAnalysis.risksAndWarnings?.goingConcern ?? "";
+          if (gc.toLowerCase().includes("qualif") || gc.toLowerCase().includes("doubt")) {
+            redFlags.push("Going concern doubt");
+          }
+        }
+
+        if (profitYoy !== null && profitYoy < -5) {
+          if (profitYoy < -20) {
+            redFlags.push(`Profit down ${Math.abs(profitYoy).toFixed(0)}%`);
+          } else {
+            amberFlags.push("Profit declining");
+          }
+        }
+
+        if (dl?.currentYearFinancials.debtToEquity != null && dl.currentYearFinancials.debtToEquity > 2) {
+          amberFlags.push("High D/E ratio");
+        }
+
+        if (turnoverYoy !== null && turnoverYoy < -10) {
+          redFlags.push(`Turnover down ${Math.abs(turnoverYoy).toFixed(0)}%`);
+        }
+
+        const summaryText = cachedAnalysis
+          ? (cachedAnalysis.cashFlowSignals?.summary || cachedAnalysis.strategicDirection?.managementOutlook || "")
+          : null;
+
+        return (
+          <div style={{
+            backgroundColor: "#ffffff",
+            border: "0.5px solid #e2e8f0",
+            borderRadius: "10px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
+            overflow: "hidden",
+            marginBottom: "24px",
+          }}>
+            {/* Row 1 — Company identity */}
             <div style={{
-              fontSize: "12px",
-              color: "#dc2626",
-              backgroundColor: "rgba(220,38,38,0.06)",
-              border: "1px solid rgba(220,38,38,0.25)",
-              borderRadius: "6px",
-              padding: "6px 10px",
-              maxWidth: "340px",
-              wordBreak: "break-word",
+              padding: "20px 24px 16px",
+              display: "flex", alignItems: "flex-start",
+              justifyContent: "space-between", gap: "16px",
+              borderBottom: "0.5px solid #e2e8f0",
             }}>
-              Watchlist error: {watchlistErrorMsg}
-            </div>
-          )}
-        </div>
-      </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{
+                  fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif',
+                  fontSize: "22px", fontWeight: "500", color: "#0f172a",
+                  margin: "0 0 10px 0", lineHeight: "1.2",
+                }}>
+                  {company.company_name}
+                </h1>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                  <StatusBadge status={company.company_status} />
+                  <MetaPill label={company.company_number} />
+                  {company.company_type && (
+                    <MetaPill label={fmtCompanyType(company.company_type)} />
+                  )}
+                  {company.sic_codes?.slice(0, 2).map((code: string) => (
+                    <MetaPill key={code} label={`SIC ${code}`} />
+                  ))}
+                </div>
+              </div>
 
-      {/* Tab bar */}
-      <div style={{ marginBottom: "24px" }}>
-        <CompanyTabs activeTab={activeTab} onTabChange={setActiveTab} />
-      </div>
+              {/* Action buttons */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px", flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={watchlistState === "idle" ? handleWatchlist : undefined}
+                    disabled={watchlistState !== "idle"}
+                    style={{
+                      padding: "8px 14px", borderRadius: "8px",
+                      border: watchlistState === "error"
+                        ? "1px solid rgba(220,38,38,0.4)"
+                        : watchlistState === "done"
+                        ? "1px solid rgba(5,150,105,0.3)"
+                        : "1px solid #e2e8f0",
+                      backgroundColor: watchlistState === "done"
+                        ? "rgba(5,150,105,0.08)"
+                        : watchlistState === "error"
+                        ? "rgba(220,38,38,0.08)"
+                        : "#ffffff",
+                      color: watchlistState === "done" ? "#059669"
+                        : watchlistState === "error" ? "#dc2626"
+                        : "#475569",
+                      fontSize: "13px",
+                      fontWeight: watchlistState === "done" ? "600" : "500",
+                      cursor: watchlistState === "idle" ? "pointer" : "default",
+                      opacity: watchlistState === "checking" || watchlistState === "saving" ? 0.55 : 1,
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {watchlistState === "checking" || watchlistState === "saving" ? "…"
+                      : watchlistState === "done" ? "✓ Watchlisted"
+                      : watchlistState === "error" ? "Error — retry"
+                      : "+ Watchlist"}
+                  </button>
+                  <button style={{
+                    padding: "8px 14px", borderRadius: "8px",
+                    border: "1px solid #e2e8f0", backgroundColor: "#ffffff",
+                    color: "#475569", fontSize: "13px", fontWeight: "500", cursor: "pointer",
+                  }}>
+                    Export PDF
+                  </button>
+                  <button
+                    onClick={() => window.dispatchEvent(new CustomEvent("deepdue:open-chat"))}
+                    style={{
+                      padding: "8px 14px", borderRadius: "8px",
+                      border: "none", backgroundColor: "#4f46e5",
+                      color: "#ffffff", fontSize: "13px", fontWeight: "600", cursor: "pointer",
+                    }}
+                  >
+                    Ask AI
+                  </button>
+                </div>
+                {watchlistErrorMsg && (
+                  <div style={{
+                    fontSize: "12px", color: "#dc2626",
+                    backgroundColor: "rgba(220,38,38,0.06)",
+                    border: "1px solid rgba(220,38,38,0.25)",
+                    borderRadius: "6px", padding: "6px 10px",
+                    maxWidth: "340px", wordBreak: "break-word",
+                  }}>
+                    Watchlist error: {watchlistErrorMsg}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2 — Metrics strip */}
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(6, 1fr)",
+              borderBottom: "0.5px solid #e2e8f0",
+            }}>
+              {dlLoading ? (
+                <>{[0,1,2,3,4,5].map((i) => <SkeletonCol key={i} />)}</>
+              ) : dl ? (
+                <>
+                  <MetricCol label="Turnover" value={fmtCurrency(turnover)} yoyPct={turnoverYoy} wide />
+                  <MetricCol label="Profit / Loss" value={fmtCurrency(profitLoss)} yoyPct={profitYoy} wide />
+                  <MetricCol label="Total Assets" value={fmtCurrency(totalAssets)} yoyPct={assetsGrowth != null ? assetsGrowth * 100 : null} />
+                  <MetricCol label="Net Assets" value={fmtCurrency(netAssets)} yoyPct={netAssetsGrowth != null ? netAssetsGrowth * 100 : null} />
+                  <MetricCol
+                    label="Employees"
+                    value={employees != null ? employees.toLocaleString() : "—"}
+                    subtitle="Avg during period"
+                  />
+                  <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
+                    <div style={{ fontSize: "10px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                      Accounts Filed
+                    </div>
+                    <div style={{ fontSize: "15px", fontWeight: "600", color: "#0f172a" }}>
+                      {lastAccountsDate
+                        ? new Date(lastAccountsDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                        : "—"}
+                    </div>
+                    {nextDueDate && (
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                        Due {new Date(nextDueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  gridColumn: "1 / -1", padding: "16px 24px",
+                  fontSize: "12px", color: "#94a3b8",
+                }}>
+                  No financial data available
+                </div>
+              )}
+            </div>
+
+            {/* Row 3 — AI summary bar */}
+            <div style={{
+              padding: "12px 20px",
+              backgroundColor: "#f8fafc",
+              borderBottom: "0.5px solid #e2e8f0",
+              display: "flex", gap: "12px", alignItems: "flex-start",
+            }}>
+              <div style={{
+                width: "22px", height: "22px", backgroundColor: "#4f46e5",
+                borderRadius: "5px", flexShrink: 0, marginTop: "1px",
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {summaryText ? (
+                  <>
+                    <div style={{ fontSize: "13px", color: "#0f172a", lineHeight: "1.5" }}>
+                      <span style={{ fontWeight: "600" }}>AI summary</span> — {summaryText}
+                    </div>
+                    {(greenFlags.length > 0 || amberFlags.length > 0 || redFlags.length > 0) && (
+                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "7px" }}>
+                        {greenFlags.map((f) => (
+                          <span key={f} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px",
+                            borderRadius: "100px", color: "#059669",
+                            backgroundColor: "rgba(5,150,105,0.10)",
+                            border: "1px solid rgba(5,150,105,0.25)",
+                          }}>{f}</span>
+                        ))}
+                        {amberFlags.map((f) => (
+                          <span key={f} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px",
+                            borderRadius: "100px", color: "#d97706",
+                            backgroundColor: "rgba(217,119,6,0.10)",
+                            border: "1px solid rgba(217,119,6,0.25)",
+                          }}>{f}</span>
+                        ))}
+                        {redFlags.map((f) => (
+                          <span key={f} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px",
+                            borderRadius: "100px", color: "#dc2626",
+                            backgroundColor: "rgba(220,38,38,0.10)",
+                            border: "1px solid rgba(220,38,38,0.25)",
+                          }}>{f}</span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : cachedAnalysis && !summaryText ? (
+                  <>
+                    <div style={{ fontSize: "13px", color: "#475569" }}>
+                      <span style={{ fontWeight: "600" }}>AI summary</span> — Analysis complete.
+                    </div>
+                    {(greenFlags.length > 0 || amberFlags.length > 0 || redFlags.length > 0) && (
+                      <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "7px" }}>
+                        {greenFlags.map((f) => (
+                          <span key={f} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px",
+                            borderRadius: "100px", color: "#059669",
+                            backgroundColor: "rgba(5,150,105,0.10)",
+                            border: "1px solid rgba(5,150,105,0.25)",
+                          }}>{f}</span>
+                        ))}
+                        {amberFlags.map((f) => (
+                          <span key={f} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px",
+                            borderRadius: "100px", color: "#d97706",
+                            backgroundColor: "rgba(217,119,6,0.10)",
+                            border: "1px solid rgba(217,119,6,0.25)",
+                          }}>{f}</span>
+                        ))}
+                        {redFlags.map((f) => (
+                          <span key={f} style={{
+                            fontSize: "11px", fontWeight: "600", padding: "2px 9px",
+                            borderRadius: "100px", color: "#dc2626",
+                            backgroundColor: "rgba(220,38,38,0.10)",
+                            border: "1px solid rgba(220,38,38,0.25)",
+                          }}>{f}</span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: "13px", color: "#64748b" }}>
+                    Run AI analysis to see intelligent summary and risk flags{" "}
+                    <span style={{ color: "#94a3b8" }}>→ click</span>{" "}
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent("deepdue:open-chat"))}
+                      style={{
+                        background: "none", border: "none", padding: "0",
+                        color: "#4f46e5", fontWeight: "600", fontSize: "13px",
+                        cursor: "pointer", textDecoration: "underline",
+                      }}
+                    >
+                      Ask AI
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 4 — Tabs */}
+            <CompanyTabs activeTab={activeTab} onTabChange={setActiveTab} />
+          </div>
+        );
+      })()}
 
       {/* Two-column layout */}
       <div style={{ display: "flex", gap: "20px", alignItems: "start" }}>
@@ -2036,6 +2339,13 @@ export default function CompanyPageClient({
               networkData={networkData}
               networkLoading={networkLoading}
             />
+          )}
+
+          {/* News tab */}
+          {activeTab === "news" && (
+            <div style={{ ...CARD, padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+              News coming soon
+            </div>
           )}
         </div>
 
