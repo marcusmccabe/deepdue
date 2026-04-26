@@ -12,7 +12,8 @@ export type TabId =
   | "filings"
   | "charges"
   | "ownership"
-  | "director-network";
+  | "director-network"
+  | "news";
 
 export const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -23,6 +24,7 @@ export const TABS: { id: TabId; label: string }[] = [
   { id: "charges", label: "Charges" },
   { id: "ownership", label: "Ownership" },
   { id: "director-network", label: "Director network" },
+  { id: "news", label: "News" },
 ];
 
 // ── Props ─────────────────────────────────────────────────────────────────────
