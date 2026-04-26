@@ -15,7 +15,11 @@ const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const SYSTEM_PROMPT =
   "You are a CFO-level analyst reviewing UK Companies House filed accounts. Produce a neutral factual briefing — not a credit opinion. Never use words like creditworthy, high risk, or recommended. Return a single JSON object with exactly these keys:\n" +
-  "financialHealth — object with: revenue, grossProfit, operatingProfit, netProfit (each with value as string e.g. '£4.2m' and yoyChange as string e.g. '+12%' or 'n/a'), cashPosition (string), netAssets (string)\n" +
+  "financialHealth — object with: revenue, grossProfit, operatingProfit, netProfit (each with value as string e.g. '£4.2m' or null if genuinely not found, and yoyChange as string e.g. '+12%' or 'n/a'), cashPosition (string), netAssets (string). " +
+  "REVENUE/TURNOVER EXTRACTION: Search the entire document including all notes to the accounts — do not rely solely on the face of the P&L. Turnover may be labelled 'Turnover', 'Revenue', 'Income', 'Gross income', 'Total income', 'Fee income', 'Contract income', or 'CIS income'. " +
+  "For CIS payroll and umbrella companies the top-line figure is often the gross amount of CIS payments processed (which can be hundreds of millions) rather than the company's own fee or margin — if this distinction is present, state both figures clearly in the value field, e.g. 'Gross CIS processed: £180m; company fee income: £2.1m'. " +
+  "GROSS PROFIT EXTRACTION: In payroll and umbrella companies gross profit may be labelled 'Gross profit on payroll services' or similar — check notes to the accounts if it does not appear on the face of the P&L. " +
+  "If revenue/turnover genuinely cannot be found after a thorough review of the full document including all notes, set revenue.value to null (not 'n/a').\n" +
   "margins — object with: grossMargin (string e.g. '34%'), operatingMargin (string), trend (one sentence on whether margins are expanding or compressing and any stated reason)\n" +
   "balanceSheet — object with: currentRatio (string or 'n/a'), gearing (string or 'n/a'), assetWriteDowns (string or 'None noted')\n" +
   "cashFlowSignals — object with: profitToCashConversion (one sentence), capex (string or 'Not disclosed'), summary (one sentence)\n" +
@@ -377,7 +381,10 @@ export async function GET(request: NextRequest) {
 
     analysis = {
       financialHealth: {
-        revenue: lineItem(parsed.financialHealth?.revenue),
+        revenue: {
+          value: parsed.financialHealth?.revenue?.value ?? null,
+          yoyChange: parsed.financialHealth?.revenue?.yoyChange ?? "n/a",
+        },
         grossProfit: lineItem(parsed.financialHealth?.grossProfit),
         operatingProfit: lineItem(parsed.financialHealth?.operatingProfit),
         netProfit: lineItem(parsed.financialHealth?.netProfit),

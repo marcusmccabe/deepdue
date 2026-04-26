@@ -380,15 +380,13 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
     previous: number | null | undefined;
     formatter?: (v: number | null) => string;
   }> = [
-    { label: "Total Assets", current: cur.totalAssets, previous: prev.totalAssets },
-    { label: "Total Liabilities", current: cur.totalLiabilities, previous: prev.totalLiabilities },
-    { label: "Net Assets / Equity", current: cur.equity, previous: prev.equity },
-    { label: "Current Assets", current: cur.currentAssets, previous: prev.currentAssets },
-    { label: "Fixed Assets", current: cur.fixedAssets, previous: prev.fixedAssets },
-    { label: "Current Liabilities", current: cur.currentLiabilities, previous: prev.currentLiabilities },
-    { label: "Cash", current: cur.cash, previous: prev.cash },
     { label: "Turnover", current: cur.turnover, previous: prev.turnover },
     { label: "Profit / Loss", current: cur.profitLoss, previous: prev.profitLoss },
+    { label: "Net Assets / Equity", current: cur.equity, previous: prev.equity },
+    { label: "Total Assets", current: cur.totalAssets, previous: prev.totalAssets },
+    { label: "Total Liabilities", current: cur.totalLiabilities, previous: prev.totalLiabilities },
+    { label: "Current Assets", current: cur.currentAssets, previous: prev.currentAssets },
+    { label: "Fixed Assets", current: cur.fixedAssets, previous: prev.fixedAssets },
   ].filter((r) => r.current !== null);
 
   const showEmployees = data.averageNumberEmployeesDuringPeriod !== null;
@@ -522,7 +520,11 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
       {/* Metric rows */}
       {rows.map((r, i) => {
         const isLast =
-          i === rows.length - 1 && !showEmployees && !showDebtToEquity;
+          i === rows.length - 1 &&
+          !showDebtToEquity &&
+          !showAssetsGrowth &&
+          !showNetAssetsGrowth &&
+          !showEmployees;
         return (
           <DLMetricRow
             key={r.label}
@@ -535,17 +537,6 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
         );
       })}
 
-      {showEmployees && (
-        <DLMetricRow
-          label="Employees (avg)"
-          current={data.averageNumberEmployeesDuringPeriod}
-          previous={undefined}
-          formatter={formatEmployees}
-          hasPrev={hasPrev}
-          isLast={!showDebtToEquity}
-        />
-      )}
-
       {showDebtToEquity && (
         <DLMetricRow
           label="Debt-to-Equity"
@@ -553,7 +544,7 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
           previous={undefined}
           formatter={formatRatio}
           hasPrev={hasPrev}
-          isLast={!showAssetsGrowth && !showNetAssetsGrowth}
+          isLast={!showAssetsGrowth && !showNetAssetsGrowth && !showEmployees}
         />
       )}
 
@@ -564,7 +555,7 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
           previous={undefined}
           formatter={formatGrowthRate}
           hasPrev={hasPrev}
-          isLast={!showNetAssetsGrowth}
+          isLast={!showNetAssetsGrowth && !showEmployees}
         />
       )}
 
@@ -574,6 +565,17 @@ function DataLedgerPanel({ data }: { data: DataLedgerData }) {
           current={data.netAssetsGrowthRate ?? null}
           previous={undefined}
           formatter={formatGrowthRate}
+          hasPrev={hasPrev}
+          isLast={!showEmployees}
+        />
+      )}
+
+      {showEmployees && (
+        <DLMetricRow
+          label="Employees (avg)"
+          current={data.averageNumberEmployeesDuringPeriod}
+          previous={undefined}
+          formatter={formatEmployees}
           hasPrev={hasPrev}
           isLast
         />
