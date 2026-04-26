@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     const rawBody = await res.text();
     console.log(`[dataledger] ${companyNumber} response status=${res.status}`);
-    console.log(`[dataledger] ${companyNumber} response body (first 500): ${rawBody.slice(0, 500)}`);
+    console.log(`[dataledger] ${companyNumber} response body (full): ${rawBody}`);
 
     if (res.status === 404 || res.status === 204) {
       const data: DataLedgerResponse = { found: false };
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     const json = JSON.parse(rawBody) as Record<string, unknown>;
 
-    const data: DataLedgerData = {
+    const data: DataLedgerData & { rawData: Record<string, unknown> } = {
       found: true,
       companyNumber: (json.companyNumber as string) ?? companyNumber,
       companyName: (json.companyName as string) ?? "",
@@ -110,6 +110,7 @@ export async function GET(request: NextRequest) {
       previousYearFinancials: extractPreviousFinancials(json),
       assetsGrowthRate: n(json.assetsGrowthRate),
       netAssetsGrowthRate: n(json.netAssetsGrowthRate),
+      rawData: json,
     };
 
     console.log(
