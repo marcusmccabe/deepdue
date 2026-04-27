@@ -243,11 +243,57 @@ function AuditOpinionBadge({ opinion }: { opinion: string }) {
 
 interface Props {
   companyNumber: string;
+  companyName?: string;
 }
 
 type Status = "loading" | "success" | "not-found" | "error";
 
-export default function AIAnalysisCard({ companyNumber }: Props) {
+export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
+  const [question, setQuestion] = useState('')
+  const [isAsking, setIsAsking] = useState(false)
+  const [answer, setAnswer] = useState<string | null>(null)
+  const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([])
+
+  const suggestedQuestions = [
+    'Is this a safe supplier?',
+    'Summarise for a credit committee',
+    'What are the key risks?',
+    'How does cash conversion look?'
+  ]
+
+  const handleAsk = async (q?: string) => {
+    const queryText = q || question
+    if (!queryText.trim() || isAsking) return
+    setIsAsking(true)
+    setQuestion('')
+    try {
+      const res = await fetch('/api/ask-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: queryText,
+          companyName: companyName || '',
+          companyNumber: companyNumber || '',
+          analysisContext: JSON.stringify(analysis),
+          chatHistory
+        })
+      })
+      const data = await res.json()
+      if (data.answer) {
+        setAnswer(data.answer)
+        setChatHistory(prev => [
+          ...prev,
+          { role: 'user', content: queryText },
+          { role: 'assistant', content: data.answer }
+        ])
+      }
+    } catch (e) {
+      setAnswer('Sorry, something went wrong. Please try again.')
+    } finally {
+      setIsAsking(false)
+    }
+  }
+
   const [status, setStatus] = useState<Status>("loading");
   const [analysis, setAnalysis] = useState<AccountsAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState("");

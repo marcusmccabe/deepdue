@@ -2081,7 +2081,7 @@ export default function CompanyPageClient({
               </div>
 
               {/* AI analysis — Risks & Warnings now lives inside this card */}
-              <AIAnalysisCard companyNumber={company.company_number} />
+              <AIAnalysisCard companyNumber={company.company_number} companyName={company.company_name} />
             </>
           )}
 
