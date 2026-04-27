@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY
-})
+const ANTHROPIC_API = "https://api.anthropic.com/v1/messages"
+const RETRY_DELAYS_MS = [0, 2_000, 4_000, 8_000]
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,10 +13,10 @@ export async function POST(request: NextRequest) {
 
     const messages = [
       ...(chatHistory || []),
-      { role: 'user' as const, content: question }
+      { role: 'user', content: question }
     ]
 
-    const response = await anthropic.messages.create({
+    const body = JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: `You are a company intelligence analyst for DocuData, a UK company intelligence platform. You have been given the AI analysis of ${companyName} (Companies House number: ${companyNumber}) extracted from their filed accounts at Companies House.
@@ -30,7 +28,43 @@ Answer the user's questions about this company concisely and accurately based on
       messages
     })
 
-    const answer = response.content[0].type === 'text' ? response.content[0].text : ''
+    let anthropicRes!: Response
+
+    for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+      if (RETRY_DELAYS_MS[attempt] > 0) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]))
+      }
+
+      anthropicRes = await fetch(ANTHROPIC_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
+          'anthropic-version': '2023-06-01',
+        },
+        body,
+      })
+
+      if (anthropicRes.status !== 529) break
+
+      console.warn(`[ask-ai] Anthropic overloaded (529), attempt ${attempt + 1}/${RETRY_DELAYS_MS.length}`)
+    }
+
+    if (anthropicRes.status === 529) {
+      return NextResponse.json(
+        { error: 'AI temporarily unavailable — Anthropic API is overloaded. Please try again in a few minutes.' },
+        { status: 503 }
+      )
+    }
+
+    if (!anthropicRes.ok) {
+      const errBody = await anthropicRes.text().catch(() => '')
+      console.error('[ask-ai] Anthropic error:', errBody)
+      return NextResponse.json({ error: `Anthropic API error (${anthropicRes.status})` }, { status: 502 })
+    }
+
+    const aiData = await anthropicRes.json()
+    const answer = aiData.content?.[0]?.text ?? ''
 
     return NextResponse.json({
       answer,
