@@ -480,220 +480,220 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
   );
 
   return (
-    <div style={CARD}>
-      <CardHeader badge={headerBadge} />
+    <div className="space-y-3">
 
-      <div
-        style={{
-          padding: "16px 18px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-          backgroundColor: "#f8fafc",
-        }}
-      >
-        {/* ── 1. Financial Health ── */}
-        <SectionCard heading="Financial Health">
-          <LabelledRow label="Revenue" value={<FinancialLineItemValue item={fh.revenue} />} />
-          <LabelledRow
-            label="Gross Profit"
-            value={<FinancialLineItemValue item={fh.grossProfit} />}
-          />
-          <LabelledRow
-            label="Operating Profit"
-            value={<FinancialLineItemValue item={fh.operatingProfit} />}
-          />
-          <LabelledRow
-            label="Net Profit"
-            value={<FinancialLineItemValue item={fh.netProfit} />}
-          />
-          <LabelledRow label="Cash Position" value={fh.cashPosition} />
-          <LabelledRow label="Net Assets" value={fh.netAssets} />
-        </SectionCard>
+      {/* Header + chips + risk cards */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
 
-        {/* ── 2. Margins & Profitability ── */}
-        <SectionCard heading="Margins & Profitability">
-          <LabelledRow label="Gross Margin" value={mg.grossMargin} />
-          <LabelledRow label="Operating Margin" value={mg.operatingMargin} />
-          <LabelledRow label="Trend" value={mg.trend} />
-        </SectionCard>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-[#5B5BD6] rounded-md flex items-center justify-center text-white text-xs font-bold">✦</div>
+            <div>
+              <div className="text-sm font-semibold leading-tight">AI Document Intelligence</div>
+              <div className="text-xs text-gray-400">Extracted from filed accounts</div>
+            </div>
+          </div>
+          {analysis ? (
+            <span className="text-xs font-semibold text-[#0F6E56] bg-[#E1F5EE] px-3 py-1 rounded-full">✓ Analysis complete</span>
+          ) : (
+            <span className="text-xs font-semibold text-white bg-[#5B5BD6] px-3 py-1 rounded-full cursor-pointer">Run AI Analysis</span>
+          )}
+        </div>
 
-        {/* ── 3. Balance Sheet ── */}
-        <SectionCard heading="Balance Sheet">
-          <LabelledRow label="Current Ratio" value={bs.currentRatio} />
-          <LabelledRow label="Gearing" value={bs.gearing} />
-          <LabelledRow label="Asset Write-downs" value={bs.assetWriteDowns} />
-        </SectionCard>
+        {/* Risk chips */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {fh.revenue.yoyChange?.startsWith('-') && (
+            <span className="text-xs font-semibold bg-[#FAEEDA] text-[#854F0B] px-3 py-1 rounded-full">
+              Revenue declining {fh.revenue.yoyChange}
+            </span>
+          )}
+          {fh.revenue.yoyChange?.startsWith('+') && (
+            <span className="text-xs font-semibold bg-[#E1F5EE] text-[#0F6E56] px-3 py-1 rounded-full">
+              Revenue growing {fh.revenue.yoyChange}
+            </span>
+          )}
+          {(!isMuted(df.directorLoans) || !isMuted(df.relatedPartyTransactions)) ? (
+            <span className="text-xs font-semibold bg-[#FCEBEB] text-[#A32D2D] px-3 py-1 rounded-full">Director flags present</span>
+          ) : (
+            <span className="text-xs font-semibold bg-[#E1F5EE] text-[#0F6E56] px-3 py-1 rounded-full">No director concerns</span>
+          )}
+        </div>
 
-        {/* ── 4. Cash Flow ── */}
-        <SectionCard heading="Cash Flow">
-          <LabelledRow
-            label="Profit to Cash Conversion"
-            value={cf.profitToCashConversion}
-          />
-          <LabelledRow label="Capex" value={cf.capex} />
-          <LabelledRow label="Summary" value={cf.summary} />
-        </SectionCard>
+        {/* Three risk summary cards */}
+        {(() => {
+          const revenueYoy = fh.revenue.yoyChange ?? ''
+          const creditRisk = revenueYoy.startsWith('-') ? 'Medium' : 'Low'
+          const cashHealth = !isMuted(fh.cashPosition) ? 'Adequate' : 'Weak'
+          const hasDirectorConcerns = !isMuted(df.directorLoans) || !isMuted(df.relatedPartyTransactions)
+          const dirRisk = hasDirectorConcerns ? 'Medium' : 'Low'
+          const s = {
+            Low:      { bg: 'bg-[#E1F5EE] border-[#5DCAA5]', t: 'text-[#0F6E56]' },
+            Medium:   { bg: 'bg-[#FAEEDA] border-[#EF9F27]', t: 'text-[#854F0B]' },
+            High:     { bg: 'bg-[#FCEBEB] border-[#F09595]', t: 'text-[#A32D2D]' },
+            Adequate: { bg: 'bg-[#FAEEDA] border-[#EF9F27]', t: 'text-[#854F0B]' },
+            Weak:     { bg: 'bg-[#FCEBEB] border-[#F09595]', t: 'text-[#A32D2D]' },
+          } as Record<string, {bg: string, t: string}>
+          return (
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[
+                { label: 'Credit risk', val: creditRisk, sub: 'Revenue trend + equity' },
+                { label: 'Cash health', val: cashHealth, sub: fh.cashPosition },
+                { label: 'Director risk', val: dirRisk, sub: 'Based on filing flags' },
+              ].map(({ label, val, sub }) => (
+                <div key={label} className={`rounded-lg p-3 border ${s[val]?.bg}`}>
+                  <div className={`text-xs font-semibold uppercase tracking-wide mb-1 ${s[val]?.t}`}>{label}</div>
+                  <div className={`text-sm font-bold ${s[val]?.t}`}>{val}</div>
+                  <div className={`text-xs mt-1 ${s[val]?.t} opacity-80`}>{sub}</div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
 
-        {/* ── 5. Director & Related Party Flags ── */}
-        <SectionCard heading="Director & Related Party Flags">
-          <LabelledRow label="Director Loans" value={df.directorLoans} />
-          <LabelledRow
-            label="Related Party Transactions"
-            value={df.relatedPartyTransactions}
-          />
-          <LabelledRow label="Remuneration Notes" value={df.remunerationNotes} />
-        </SectionCard>
-
-        {/* ── 6. Strategic Direction ── */}
-        <SectionCard heading="Strategic Direction">
-          <LabelledRow label="Management Outlook" value={sd.managementOutlook} />
-          <LabelledRow
-            label="Markets or Geographies"
-            value={sd.marketsOrGeographies}
-          />
-          <LabelledRow
-            label="Acquisitions or Restructuring"
-            value={sd.acquisitionsOrRestructuring}
-          />
-          <LabelledRow label="R&D or Investment" value={sd.rdOrInvestment} />
-        </SectionCard>
-
-        {/* ── 7. Risks & Warnings ── */}
-        <SectionCard heading="Risks & Warnings">
-          <LabelledRow
-            label="Explicit Risks"
-            value={
-              rw.explicitRisks.length === 0 ? (
-                <span style={{ color: "#94a3b8", fontStyle: "italic" }}>None stated</span>
-              ) : (
-                <ul
-                  style={{
-                    margin: 0,
-                    paddingLeft: "18px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  {rw.explicitRisks.map((risk, i) => (
-                    <li
-                      key={i}
-                      style={{
-                        fontSize: "13px",
-                        color: "#0f172a",
-                        lineHeight: "1.55",
-                      }}
-                    >
-                      {risk}
-                    </li>
-                  ))}
-                </ul>
-              )
-            }
-          />
-          <LabelledRow
-            label="Material Uncertainties"
-            value={rw.materialUncertainties}
-          />
-          <LabelledRow label="Going Concern" value={rw.goingConcern} />
-        </SectionCard>
-
-        {/* ── 8. Audit Opinion ── */}
-        <SectionCard heading="Audit Opinion">
-          <LabelledRow
-            label="Opinion"
-            value={<AuditOpinionBadge opinion={ao.opinion} />}
-          />
-          <LabelledRow label="Qualifications" value={ao.qualifications} />
-          <LabelledRow
-            label="Auditor Name"
-            value={
-              ao.auditorName && ao.auditorName.trim().length > 0 ? (
-                ao.auditorName
-              ) : (
-                <span style={{ color: "#94a3b8", fontStyle: "italic" }}>Not disclosed</span>
-              )
-            }
-          />
-          <LabelledRow
-            label="Auditor Changed"
-            value={
-              ao.auditorChanged ? (
-                <span style={{ fontWeight: "700", color: "#d97706" }}>Yes</span>
-              ) : (
-                "No"
-              )
-            }
-          />
-        </SectionCard>
-
-        {/* ── 9. Compliance Signals ── */}
-        <SectionCard heading="Compliance Signals">
-          <LabelledRow
-            label="Late Filing History"
-            value={cs.lateFilingHistory}
-          />
-          <LabelledRow
-            label="Dormancy or Strike-off"
-            value={cs.dormancyOrStrikeOff}
-          />
-          <LabelledRow
-            label="Charges Registered"
-            value={cs.chargesRegistered}
-          />
-        </SectionCard>
-
-        {/* ── Footer ── */}
-        <div
-          style={{
-            paddingTop: "4px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-          }}
-        >
-          <span style={{ fontSize: "11px", color: "#94a3b8" }}>
-            Analysis run{" "}
-            {new Date(analysis.analysedAt).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-            {analysis.cached ? " · Cached result" : " · Cached for 24 hours"}
-            {analysis.documentDate && (
-              <>
-                {" · Accounts filed "}
-                {new Date(analysis.documentDate).toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </>
-            )}
-          </span>
-
-          <Link
-            href={`/company/${companyNumber}/financials`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              padding: "10px 18px",
-              backgroundColor: "#4f46e5",
-              color: "#ffffff",
-              borderRadius: "8px",
-              fontSize: "13px",
-              fontWeight: "700",
-              letterSpacing: "0.01em",
-              textDecoration: "none",
-            }}
-          >
-            View Full Financials →
-          </Link>
+        {/* Ask AI panel */}
+        <div className="bg-[#F5F5FF] border border-[#C7C7F0] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
+            <span className="text-sm font-bold text-[#3D3D9E]">Ask AI about this company</span>
+          </div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {suggestedQuestions.map(q => (
+              <button
+                key={q}
+                onClick={() => handleAsk(q)}
+                className="text-xs text-[#5B5BD6] bg-white border border-[#C7C7F0] rounded-full px-3 py-1 hover:bg-[#EEEEFF] transition-colors"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAsk()}
+              placeholder={`Ask anything about ${companyName || 'this company'}...`}
+              className="flex-1 border border-[#C7C7F0] rounded-lg px-3 py-2 text-sm bg-white text-gray-800 outline-none focus:border-[#5B5BD6]"
+            />
+            <button
+              onClick={() => handleAsk()}
+              disabled={isAsking || !question.trim()}
+              className="bg-[#5B5BD6] text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-[#4A4AC5] transition-colors"
+            >
+              {isAsking ? '...' : 'Ask'}
+            </button>
+          </div>
+          {isAsking && (
+            <div className="mt-3 flex gap-1">
+              <div className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce" style={{animationDelay:'0ms'}}/>
+              <div className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce" style={{animationDelay:'150ms'}}/>
+              <div className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce" style={{animationDelay:'300ms'}}/>
+            </div>
+          )}
+          {answer && !isAsking && (
+            <div className="mt-3 bg-white border border-[#C7C7F0] rounded-lg p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {answer}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Financial health + Margins grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+          <div className="text-sm font-semibold mb-3">Financial health</div>
+          {[
+            { label: 'Revenue', val: fh.revenue.value, change: fh.revenue.yoyChange },
+            { label: 'Gross profit', val: fh.grossProfit.value, change: fh.grossProfit.yoyChange },
+            { label: 'Operating profit', val: fh.operatingProfit.value, change: fh.operatingProfit.yoyChange },
+            { label: 'Net profit', val: fh.netProfit.value, change: fh.netProfit.yoyChange },
+            { label: 'Cash position', val: fh.cashPosition, change: null },
+            { label: 'Net assets', val: fh.netAssets, change: null },
+          ].filter(r => r.val && !isMuted(r.val)).map(({ label, val, change }) => (
+            <div key={label} className="flex items-baseline py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400 w-36 shrink-0">{label}</span>
+              <span className="text-sm font-semibold mr-2">{val}</span>
+              {change && !isMuted(change) && change !== 'n/a' && (
+                <span className={`text-xs font-semibold ${change.startsWith('-') ? 'text-red-500' : 'text-[#0F6E56]'}`}>
+                  {change.startsWith('-') ? '▼' : '▲'} {change}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+          <div className="text-sm font-semibold mb-3">Margins & profitability</div>
+          {[
+            { label: 'Gross margin', val: mg.grossMargin },
+            { label: 'Operating margin', val: mg.operatingMargin },
+          ].filter(r => r.val && !isMuted(r.val)).map(({ label, val }) => (
+            <div key={label} className="flex items-baseline py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400 w-36 shrink-0">{label}</span>
+              <span className="text-sm font-semibold">{val}</span>
+            </div>
+          ))}
+          {mg.trend && !isMuted(mg.trend) && (
+            <p className="text-xs text-gray-400 leading-relaxed mt-3">{mg.trend}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Key findings — explicit risks */}
+      {rw.explicitRisks.length > 0 && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+          <div className="text-sm font-semibold mb-3">Key findings</div>
+          <div className="space-y-3">
+            {rw.explicitRisks.map((finding: string, i: number) => (
+              <div key={i} className="flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-[#1D9E75]" />
+                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{finding}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cash flow + Strategic direction grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+          <div className="text-sm font-semibold mb-3">Cash flow</div>
+          {cf.profitToCashConversion && !isMuted(cf.profitToCashConversion) && (
+            <div className="flex items-start py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400 w-36 shrink-0">Conversion</span>
+              <span className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{cf.profitToCashConversion}</span>
+            </div>
+          )}
+          {cf.capex && !isMuted(cf.capex) && (
+            <div className="flex items-start py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400 w-36 shrink-0">Capex</span>
+              <span className="text-sm font-semibold">{cf.capex}</span>
+            </div>
+          )}
+          {cf.summary && !isMuted(cf.summary) && (
+            <p className="text-xs text-gray-400 leading-relaxed mt-2">{cf.summary}</p>
+          )}
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+          <div className="text-sm font-semibold mb-3">Strategic direction</div>
+          {sd.managementOutlook && !isMuted(sd.managementOutlook) && (
+            <div className="flex items-start py-2 border-b border-gray-50 dark:border-gray-800">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400 w-28 shrink-0">Outlook</span>
+              <span className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{sd.managementOutlook}</span>
+            </div>
+          )}
+          {sd.marketsOrGeographies && !isMuted(sd.marketsOrGeographies) && (
+            <div className="flex items-start py-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-400 w-28 shrink-0">Markets</span>
+              <span className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{sd.marketsOrGeographies}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
     </div>
   );
 }
