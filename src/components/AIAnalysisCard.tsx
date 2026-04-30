@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type {
   AccountsAnalysis,
@@ -254,6 +254,7 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
   const [answer, setAnswer] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([])
   const [companyContext, setCompanyContext] = useState<unknown | null>(null)
+  const companyContextRef = useRef<unknown | null>(null)
   const [companyContextLoading, setCompanyContextLoading] = useState(false)
 
   const suggestedQuestions = [
@@ -271,7 +272,8 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
     setIsAsking(true)
     setQuestion('')
     try {
-      console.log('[AIAnalysisCard] submitting ask-ai with companyContext:', companyContext);
+      const currentCompanyContext = companyContextRef.current
+      console.log('[AIAnalysisCard] submitting ask-ai with companyContext:', currentCompanyContext);
       const res = await fetch('/api/ask-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -280,7 +282,7 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
           companyName: companyName || '',
           companyNumber: companyNumber || '',
           analysisContext: JSON.stringify(analysis),
-          companyContext,
+          companyContext: currentCompanyContext,
           chatHistory
         })
       })
@@ -363,6 +365,8 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
           const data = await res.json();
           if (!cancelled) {
             setCompanyContext(data);
+            companyContextRef.current = data;
+            console.log('[AIAnalysisCard] companyContext set via setCompanyContext:', data);
             console.log('[AIAnalysisCard] companyContext received from /api/company-full-context:', data);
           }
         } else {
