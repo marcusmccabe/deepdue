@@ -354,10 +354,10 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
     setCompanyContextLoading(true);
 
     (async () => {
+      const url = `/api/company-full-context?companyNumber=${encodeURIComponent(companyNumber)}`;
+      console.log('[AIAnalysisCard] fetching company-full-context from URL:', url);
       try {
-        const res = await fetch(
-          `/api/company-full-context?companyNumber=${encodeURIComponent(companyNumber)}`
-        );
+        const res = await fetch(url);
         if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
@@ -365,9 +365,26 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
             setCompanyContext(data);
             console.log('[AIAnalysisCard] companyContext received from /api/company-full-context:', data);
           }
+        } else {
+          const body = await res.text().catch(() => '');
+          console.error(
+            '[AIAnalysisCard] /api/company-full-context returned non-ok response. status:',
+            res.status,
+            'statusText:',
+            res.statusText,
+            'url:',
+            url,
+            'body:',
+            body
+          );
         }
-      } catch {
-        // Silent — Ask AI still works without the extended context.
+      } catch (err) {
+        console.error(
+          '[AIAnalysisCard] /api/company-full-context fetch failed. url:',
+          url,
+          'error:',
+          err
+        );
       } finally {
         if (!cancelled) setCompanyContextLoading(false);
       }
