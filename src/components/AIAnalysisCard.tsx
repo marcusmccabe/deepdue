@@ -253,12 +253,16 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
   const [isAsking, setIsAsking] = useState(false)
   const [answer, setAnswer] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([])
+  const [companyContext, setCompanyContext] = useState<unknown | null>(null)
+  const [companyContextLoading, setCompanyContextLoading] = useState(false)
 
   const suggestedQuestions = [
-    'Is this a safe supplier?',
-    'Summarise for a credit committee',
-    'What are the key risks?',
-    'How does cash conversion look?'
+    'What is the financial health of this company?',
+    'Who are the current directors and when were they appointed?',
+    'What other companies are the directors involved in?',
+    'Who are the beneficial owners of this company?',
+    'Are there any outstanding charges or red flags?',
+    'Summarise the most recent filings'
   ]
 
   const handleAsk = async (q?: string) => {
@@ -275,6 +279,7 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
           companyName: companyName || '',
           companyNumber: companyNumber || '',
           analysisContext: JSON.stringify(analysis),
+          companyContext,
           chatHistory
         })
       })
@@ -337,6 +342,37 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
       cancelled = true;
     };
   }, [companyNumber]);
+
+  // Fetch full Companies House context once the Ask AI panel becomes visible.
+  // The panel renders only on the success view, so we gate on `analysis` being loaded.
+  useEffect(() => {
+    if (!analysis || !companyNumber) return;
+    if (companyContext || companyContextLoading) return;
+
+    let cancelled = false;
+    setCompanyContextLoading(true);
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/company-full-context?companyNumber=${encodeURIComponent(companyNumber)}`
+        );
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setCompanyContext(data);
+        }
+      } catch {
+        // Silent — Ask AI still works without the extended context.
+      } finally {
+        if (!cancelled) setCompanyContextLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis, companyNumber, companyContext, companyContextLoading]);
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (status === "loading") {
@@ -557,17 +593,26 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
             <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
             <span className="text-sm font-bold text-[#3D3D9E]">Ask AI about this company</span>
           </div>
-          <div className="flex flex-wrap gap-2 mb-3">
+          <div className="grid grid-cols-2 gap-2 mb-3">
             {suggestedQuestions.map(q => (
               <button
                 key={q}
                 onClick={() => handleAsk(q)}
-                className="text-xs text-[#5B5BD6] bg-white border border-[#C7C7F0] rounded-full px-3 py-1 hover:bg-[#EEEEFF] transition-colors"
+                className="text-xs text-[#5B5BD6] bg-white border border-[#C7C7F0] rounded-full px-3 py-1 hover:bg-[#EEEEFF] transition-colors text-left"
               >
                 {q}
               </button>
             ))}
           </div>
+          {companyContextLoading && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-[#7878B0]">
+              <div
+                className="w-3 h-3 rounded-full border-2 border-[#C7C7F0] border-t-[#5B5BD6]"
+                style={{ animation: 'spin 0.8s linear infinite' }}
+              />
+              <span>Loading company data…</span>
+            </div>
+          )}
           <div className="flex gap-2">
             <input
               type="text"
