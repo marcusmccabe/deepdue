@@ -271,6 +271,7 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
     setIsAsking(true)
     setQuestion('')
     try {
+      console.log('[AIAnalysisCard] submitting ask-ai with companyContext:', companyContext);
       const res = await fetch('/api/ask-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -360,7 +361,10 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
         if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
-          if (!cancelled) setCompanyContext(data);
+          if (!cancelled) {
+            setCompanyContext(data);
+            console.log('[AIAnalysisCard] companyContext received from /api/company-full-context:', data);
+          }
         }
       } catch {
         // Silent — Ask AI still works without the extended context.

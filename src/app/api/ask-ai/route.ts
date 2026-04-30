@@ -7,6 +7,11 @@ export async function POST(request: NextRequest) {
   try {
     const { question, companyName, companyNumber, analysisContext, companyContext, chatHistory } = await request.json()
 
+    console.log('[ask-ai] companyContext received:', {
+      received: companyContext != null,
+      keyCount: companyContext && typeof companyContext === 'object' ? Object.keys(companyContext).length : 0,
+    })
+
     if (!question || !companyName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
