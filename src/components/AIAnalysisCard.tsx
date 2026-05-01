@@ -618,6 +618,19 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
             <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
             <span className="text-sm font-bold text-[#3D3D9E]">Ask AI about this company</span>
           </div>
+          <div className="mb-3 flex items-center gap-1.5">
+            {companyContext ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                <span className="text-xs text-green-700 font-medium">Company data ready</span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                <span className="text-xs text-amber-700 font-medium">Loading director data…</span>
+              </>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2 mb-3">
             {suggestedQuestions.map(q => (
               <button
@@ -629,15 +642,6 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
               </button>
             ))}
           </div>
-          {companyContextLoading && (
-            <div className="mb-3 flex items-center gap-2 text-xs text-[#7878B0]">
-              <div
-                className="w-3 h-3 rounded-full border-2 border-[#C7C7F0] border-t-[#5B5BD6]"
-                style={{ animation: 'spin 0.8s linear infinite' }}
-              />
-              <span>Loading company data…</span>
-            </div>
-          )}
           <div className="flex gap-2">
             <input
               type="text"
