@@ -22,25 +22,10 @@ export async function POST(request: NextRequest) {
     ]
 
     const systemPrompt = companyContext
-      ? `You are an expert company intelligence analyst. You have access to comprehensive Companies House data for ${companyName} (company number: ${companyNumber}). Answer the user's questions accurately based on the data provided. If something isn't in the data, say so clearly rather than guessing.
+      ? `You are an expert company intelligence analyst. You have access to Companies House data for ${companyName} (company number: ${companyNumber}). Answer the user's questions accurately based on the data provided. If something isn't in the data, say so clearly rather than guessing.
 
-## COMPANY PROFILE
-${JSON.stringify(companyContext.companyProfile, null, 2)}
-
-## CURRENT DIRECTORS & OFFICERS
-${JSON.stringify(companyContext.officers, null, 2)}
-
-## DIRECTOR APPOINTMENT HISTORIES (other companies each active director is or has been involved with)
+## DIRECTOR APPOINTMENT HISTORIES (other companies each director is or has been involved with)
 ${JSON.stringify(companyContext.directorAppointments, null, 2)}
-
-## PERSONS WITH SIGNIFICANT CONTROL (beneficial owners)
-${JSON.stringify(companyContext.personsWithSignificantControl, null, 2)}
-
-## CHARGES & MORTGAGES
-${JSON.stringify(companyContext.charges, null, 2)}
-
-## RECENT FILING HISTORY
-${JSON.stringify(companyContext.filingHistory, null, 2)}
 
 ## AI ACCOUNTS ANALYSIS
 ${analysisContext}`
