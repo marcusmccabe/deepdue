@@ -71,13 +71,27 @@ export async function GET(request: NextRequest) {
     .filter((o) => !o.resigned_on && o.links?.officer?.appointments)
     .slice(0, MAX_ACTIVE_OFFICERS_FOR_HISTORY);
 
+  console.log(`[company-full-context] Fetching appointments for ${activeOfficers.length} active officers`);
+
   const appointmentsResults = await Promise.all(
     activeOfficers.map(async (officer) => {
       const appointmentsPath = officer.links!.officer!.appointments!;
-      const data = await chFetch(`${appointmentsPath}?items_per_page=50`, auth);
-      const items =
-        (data as { items?: unknown[] } | null)?.items ?? [];
-      return { name: officer.name ?? "Unknown officer", items };
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      try {
+        const res = await fetch(
+          `${CH_BASE}${appointmentsPath}?items_per_page=50`,
+          { headers: { Authorization: auth }, cache: "no-store", signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+        if (!res.ok) return { name: officer.name ?? "Unknown officer", items: [] };
+        const data = await res.json();
+        const items = (data as { items?: unknown[] } | null)?.items ?? [];
+        return { name: officer.name ?? "Unknown officer", items };
+      } catch {
+        clearTimeout(timeoutId);
+        return { name: officer.name ?? "Unknown officer", items: [] };
+      }
     })
   );
 
