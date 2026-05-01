@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import type {
   AccountsAnalysis,
@@ -244,18 +244,16 @@ function AuditOpinionBadge({ opinion }: { opinion: string }) {
 interface Props {
   companyNumber: string;
   companyName?: string;
+  directorAppointments?: Record<string, any[]>;
 }
 
 type Status = "loading" | "success" | "not-found" | "error";
 
-export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
+export default function AIAnalysisCard({ companyNumber, companyName, directorAppointments }: Props) {
   const [question, setQuestion] = useState('')
   const [isAsking, setIsAsking] = useState(false)
   const [answer, setAnswer] = useState<string | null>(null)
   const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([])
-  const [companyContext, setCompanyContext] = useState<unknown | null>(null)
-  const companyContextRef = useRef<unknown | null>(null)
-  const [companyContextLoading, setCompanyContextLoading] = useState(false)
 
   const suggestedQuestions = [
     'What is the financial health of this company?',
@@ -272,8 +270,6 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
     setIsAsking(true)
     setQuestion('')
     try {
-      const currentCompanyContext = companyContextRef.current
-      console.log('[AIAnalysisCard] submitting ask-ai with companyContext:', currentCompanyContext);
       const res = await fetch('/api/ask-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -282,7 +278,9 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
           companyName: companyName || '',
           companyNumber: companyNumber || '',
           analysisContext: JSON.stringify(analysis),
-          companyContext: currentCompanyContext,
+          companyContext: {
+            directorAppointments: directorAppointments ?? {}
+          },
           chatHistory
         })
       })
@@ -345,59 +343,6 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
       cancelled = true;
     };
   }, [companyNumber]);
-
-  // Fetch full Companies House context once the Ask AI panel becomes visible.
-  // The panel renders only on the success view, so we gate on `analysis` being loaded.
-  useEffect(() => {
-    if (!analysis || !companyNumber) return;
-    if (companyContext || companyContextLoading) return;
-
-    let cancelled = false;
-    setCompanyContextLoading(true);
-
-    (async () => {
-      const url = `/api/company-full-context?companyNumber=${encodeURIComponent(companyNumber)}`;
-      console.log('[AIAnalysisCard] fetching company-full-context from URL:', url);
-      try {
-        const res = await fetch(url);
-        if (cancelled) return;
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled) {
-            setCompanyContext(data);
-            companyContextRef.current = data;
-            console.log('[AIAnalysisCard] companyContext set via setCompanyContext:', data);
-            console.log('[AIAnalysisCard] companyContext received from /api/company-full-context:', data);
-          }
-        } else {
-          const body = await res.text().catch(() => '');
-          console.error(
-            '[AIAnalysisCard] /api/company-full-context returned non-ok response. status:',
-            res.status,
-            'statusText:',
-            res.statusText,
-            'url:',
-            url,
-            'body:',
-            body
-          );
-        }
-      } catch (err) {
-        console.error(
-          '[AIAnalysisCard] /api/company-full-context fetch failed. url:',
-          url,
-          'error:',
-          err
-        );
-      } finally {
-        if (!cancelled) setCompanyContextLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [analysis, companyNumber, companyContext, companyContextLoading]);
 
   // ── Loading ──────────────────────────────────────────────────────────────
   if (status === "loading") {
@@ -617,19 +562,6 @@ export default function AIAnalysisCard({ companyNumber, companyName }: Props) {
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
             <span className="text-sm font-bold text-[#3D3D9E]">Ask AI about this company</span>
-          </div>
-          <div className="mb-3 flex items-center gap-1.5">
-            {companyContext ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                <span className="text-xs text-green-700 font-medium">Company data ready</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                <span className="text-xs text-amber-700 font-medium">Loading director data…</span>
-              </>
-            )}
           </div>
           <div className="grid grid-cols-2 gap-2 mb-3">
             {suggestedQuestions.map(q => (
