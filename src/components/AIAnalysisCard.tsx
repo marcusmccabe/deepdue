@@ -303,6 +303,13 @@ export default function AIAnalysisCard({ companyNumber, companyName, directorApp
   const [status, setStatus] = useState<Status>("loading");
   const [analysis, setAnalysis] = useState<AccountsAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [openSections, setOpenSections] = useState<string[]>(["financial"]);
+
+  const toggleSection = (id: string) => {
+    setOpenSections((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -431,7 +438,7 @@ export default function AIAnalysisCard({ companyNumber, companyName, directorApp
   // ── Success ───────────────────────────────────────────────────────────────
   if (!analysis) return null;
 
-  // ── NEW 12-section layout (only when the API returns the new schema) ─────
+  // ── NEW progressive-disclosure / accordion layout ───────────────────────
   if (analysis.executiveSummary) {
     const fp = analysis.financialPerformance;
     const bs = analysis.balanceSheetStrength;
@@ -441,204 +448,274 @@ export default function AIAnalysisCard({ companyNumber, companyName, directorApp
     const rp = analysis.relatedPartyTransactions;
     const fb = analysis.filingBehaviour;
     const kr = analysis.keyRisks;
-    // strategicDirection has the new shape here
     const sdNew = analysis.strategicDirection as
-      | { summary: string; initiatives: string[]; outlook: string }
+      | { summary?: string; initiatives?: string[]; outlook?: string }
       | undefined;
     const ca = analysis.creditAssessment;
     const flags = analysis.redFlags ?? [];
 
+    type Tone = "green" | "amber" | "red" | "neutral";
+    const toneStyles: Record<Tone, { bg: string; t: string; border: string }> = {
+      green:   { bg: "#E1F5EE", t: "#0F6E56", border: "#5DCAA5" },
+      amber:   { bg: "#FAEEDA", t: "#854F0B", border: "#EF9F27" },
+      red:     { bg: "#FCEBEB", t: "#A32D2D", border: "#F09595" },
+      neutral: { bg: "#F1F5F9", t: "#475569", border: "#CBD5E1" },
+    };
+
+    const truncate = (text: string | undefined, n: number) => {
+      if (!text) return "";
+      const t = text.trim();
+      return t.length > n ? t.slice(0, n).trimEnd() + "…" : t;
+    };
+
+    const classifyRating = (txt?: string): Tone => {
+      const v = (txt ?? "").toLowerCase();
+      if (/high|adverse|qualified|disclaimer|weak|poor/.test(v)) return "red";
+      if (/medium|moderate|adequate|watch/.test(v)) return "amber";
+      if (/low|good|clean|strong/.test(v)) return "green";
+      return "neutral";
+    };
+
+    // ── Pill 1: Credit risk ─────────────────────────────────────────────
     const ratingText = (ca?.overallRating ?? "").toLowerCase();
-    const creditRisk: "Low" | "Medium" | "High" = ratingText.includes("high")
+    const creditLabel = ratingText.includes("high")
       ? "High"
       : ratingText.includes("low")
       ? "Low"
-      : "Medium";
+      : ratingText
+      ? "Medium"
+      : "—";
+    const creditTone = classifyRating(creditLabel);
 
-    const liquidityText = (cp?.liquidityRisk ?? "").toLowerCase();
-    const cashHealth: "Adequate" | "Weak" =
-      liquidityText && /weak|concern|stretched|risk|tight|insufficient/.test(liquidityText)
-        ? "Weak"
-        : "Adequate";
+    // ── Pill 2: Cash health (derived from cashPosition.summary) ─────────
+    const cashSummary = (cp?.summary ?? "").toLowerCase();
+    const cashLabel = /weak|tight|stretched|insufficient|risk|concern|thin/.test(cashSummary)
+      ? "Weak"
+      : /good|strong|healthy|robust/.test(cashSummary)
+      ? "Good"
+      : cashSummary
+      ? "Adequate"
+      : "—";
+    const cashTone = classifyRating(cashLabel);
 
-    const dirRisk: "Low" | "Medium" =
-      (rp?.transactions?.length ?? 0) > 0 ? "Medium" : "Low";
+    // ── Pill 3: Director risk (from related-party transactions) ────────
+    const dirCount = rp?.transactions?.length ?? 0;
+    const dirLabel = dirCount === 0 ? "Low" : dirCount > 2 ? "High" : "Medium";
+    const dirTone = classifyRating(dirLabel);
 
-    const tone: Record<string, { bg: string; t: string }> = {
-      Low: { bg: "bg-[#E1F5EE] border-[#5DCAA5]", t: "text-[#0F6E56]" },
-      Medium: { bg: "bg-[#FAEEDA] border-[#EF9F27]", t: "text-[#854F0B]" },
-      High: { bg: "bg-[#FCEBEB] border-[#F09595]", t: "text-[#A32D2D]" },
-      Adequate: { bg: "bg-[#E1F5EE] border-[#5DCAA5]", t: "text-[#0F6E56]" },
-      Weak: { bg: "bg-[#FCEBEB] border-[#F09595]", t: "text-[#A32D2D]" },
+    // ── Pill 4: Audit opinion ──────────────────────────────────────────
+    const opinion = ag?.auditOpinion ?? "";
+    const auditLabel = ag?.goingConcernFlag
+      ? "Going concern"
+      : opinion || "—";
+    const auditTone: Tone = ag?.goingConcernFlag
+      ? "red"
+      : /qualified|adverse|disclaimer/i.test(opinion)
+      ? "red"
+      : /clean|unqualified/i.test(opinion)
+      ? "green"
+      : "neutral";
+
+    const pills = [
+      { label: "Credit risk",   value: creditLabel, tone: creditTone },
+      { label: "Cash health",   value: cashLabel,   tone: cashTone   },
+      { label: "Director risk", value: dirLabel,    tone: dirTone    },
+      { label: "Audit opinion", value: auditLabel,  tone: auditTone  },
+    ];
+
+    // ── Section status text + tone ─────────────────────────────────────
+    const fpStatus = truncate(fp?.yearOnYearTrend, 30);
+    const fpTone = classifyRating(fpStatus);
+
+    const bsStatus = truncate(bs?.summary || cp?.summary, 40);
+    const bsTone = classifyRating(bsStatus);
+
+    const mcNegative = !!mc?.assessment && /concern|risk|weak|issue|negative|caution|red flag|deteriorat/i.test(mc.assessment);
+    const mcStatus = mc ? (mcNegative ? "Concerns noted" : "Credible") : "—";
+    const mcTone: Tone = mcNegative ? "red" : "green";
+
+    const agIssues = !!(ag?.goingConcernFlag || /qualified|adverse|disclaimer/i.test(ag?.auditOpinion ?? ""));
+    const agStatus = ag ? (agIssues ? "Issues noted" : "Clean") : "—";
+    const agTone: Tone = agIssues ? "red" : "green";
+
+    const rpFigure = rp?.summary?.match(/£[\d.,]+\s*(?:m|million|bn|billion|k)?/i)?.[0];
+    const rpStatus = dirCount === 0
+      ? "None"
+      : rpFigure
+      ? `Significant — ${rpFigure}`
+      : `${dirCount} disclosed`;
+    const rpTone: Tone = dirCount === 0 ? "green" : "amber";
+
+    const krCount = kr?.risks?.length ?? 0;
+    const krStatus = krCount > 0 ? `${krCount} identified` : "None identified";
+    const krTone: Tone = krCount === 0 ? "green" : krCount > 3 ? "red" : "amber";
+
+    const sdOutlook = sdNew?.outlook ?? "";
+    const sdStatus = /diversif/i.test(sdOutlook)
+      ? "Diversifying"
+      : sdOutlook
+      ? truncate(sdOutlook.split(/[.!?]/)[0], 30)
+      : "—";
+    const sdTone: Tone = classifyRating(sdStatus);
+
+    const fbStatus = [fb?.accountsType, fb?.accountsMadeUpTo]
+      .filter((x): x is string => !!x && !isMuted(x))
+      .join(" · ") || "—";
+    const fbTone: Tone = "neutral";
+
+    const Chevron = () => (
+      <svg
+        className="acc-chevron"
+        viewBox="0 0 12 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="4 2 8 6 4 10" />
+      </svg>
+    );
+
+    const renderRow = (
+      id: string,
+      title: string,
+      statusText: string,
+      tone: Tone,
+      body: React.ReactNode
+    ) => {
+      const open = openSections.includes(id);
+      return (
+        <div key={id} className={`acc-row ${open ? "open" : ""}`}>
+          <button
+            type="button"
+            className="acc-header"
+            onClick={() => toggleSection(id)}
+            aria-expanded={open}
+          >
+            <span className="acc-title">{title}</span>
+            <span
+              className="acc-status"
+              style={{ color: toneStyles[tone].t }}
+            >
+              {statusText}
+            </span>
+            <Chevron />
+          </button>
+          <div className="acc-content">
+            <div className="acc-content-inner">
+              <div className="acc-content-body">{body}</div>
+            </div>
+          </div>
+        </div>
+      );
     };
 
-    const creditBullets =
-      creditRisk === "Low"
-        ? (ca?.keyStrengths ?? []).slice(0, 3)
-        : (ca?.keyConcerns ?? []).slice(0, 3);
-    const cashBullets =
-      cp?.liquidityRisk && !isMuted(cp.liquidityRisk) ? [cp.liquidityRisk] : [];
-    const dirBullets = (rp?.transactions ?? []).slice(0, 3);
+    const labelledRow = (label: string, value: string | undefined) =>
+      value && !isMuted(value) ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "140px 1fr",
+            gap: "12px",
+            padding: "6px 0",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              color: "#64748b",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              paddingTop: "2px",
+            }}
+          >
+            {label}
+          </div>
+          <div style={{ color: "#0f172a" }}>{value}</div>
+        </div>
+      ) : null;
 
     return (
       <div className="space-y-3">
-        {/* Header card with status, risk cards, Ask AI panel */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-[#5B5BD6] rounded-md flex items-center justify-center text-white text-xs font-bold">
-                ✦
+        {/* Compact branded header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-[#5B5BD6] rounded-md flex items-center justify-center text-white text-xs font-bold">
+              ✦
+            </div>
+            <div>
+              <div className="text-sm font-semibold leading-tight">
+                AI Document Intelligence
               </div>
-              <div>
-                <div className="text-sm font-semibold leading-tight">
-                  AI Document Intelligence
-                </div>
-                <div className="text-xs text-gray-400">
-                  Extracted from filed accounts
-                </div>
+              <div className="text-xs text-gray-400">
+                Extracted from filed accounts
               </div>
             </div>
-            <span className="text-xs font-semibold text-[#0F6E56] bg-[#E1F5EE] px-3 py-1 rounded-full">
-              ✓ Analysis complete
-            </span>
           </div>
-
-          {/* Three risk summary cards with bullet points */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            {[
-              {
-                label: "Credit risk",
-                val: creditRisk as string,
-                sub: ca?.ratingRationale || "Based on credit assessment",
-                bullets: creditBullets,
-              },
-              {
-                label: "Cash health",
-                val: cashHealth as string,
-                sub: cp?.cashAndEquivalents || "Liquidity position",
-                bullets: cashBullets,
-              },
-              {
-                label: "Director risk",
-                val: dirRisk as string,
-                sub: rp?.summary || "Based on related-party disclosures",
-                bullets: dirBullets,
-              },
-            ].map(({ label, val, sub, bullets }) => (
-              <div
-                key={label}
-                className={`rounded-lg p-3 border ${tone[val]?.bg ?? ""}`}
-              >
-                <div
-                  className={`text-xs font-semibold uppercase tracking-wide mb-1 ${tone[val]?.t ?? ""}`}
-                >
-                  {label}
-                </div>
-                <div className={`text-sm font-bold ${tone[val]?.t ?? ""}`}>
-                  {val}
-                </div>
-                <div
-                  className={`text-xs mt-1 ${tone[val]?.t ?? ""} opacity-80 leading-snug`}
-                >
-                  {sub}
-                </div>
-                {bullets.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {bullets.map((b: string, i: number) => (
-                      <li
-                        key={i}
-                        className={`text-xs ${tone[val]?.t ?? ""} opacity-90 flex gap-1.5`}
-                      >
-                        <span>•</span>
-                        <span className="leading-snug">{b}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Ask AI panel */}
-          <div className="bg-[#F5F5FF] border border-[#C7C7F0] rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
-              <span className="text-sm font-bold text-[#3D3D9E]">
-                Ask AI about this company
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {suggestedQuestions.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleAsk(q)}
-                  className="text-xs text-[#5B5BD6] bg-white border border-[#C7C7F0] rounded-full px-3 py-1 hover:bg-[#EEEEFF] transition-colors text-left"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAsk()}
-                placeholder={`Ask anything about ${companyName || "this company"}...`}
-                className="flex-1 border border-[#C7C7F0] rounded-lg px-3 py-2 text-sm bg-white text-gray-800 outline-none focus:border-[#5B5BD6]"
-              />
-              <button
-                onClick={() => handleAsk()}
-                disabled={isAsking || !question.trim()}
-                className="bg-[#5B5BD6] text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-[#4A4AC5] transition-colors"
-              >
-                {isAsking ? "..." : "Ask"}
-              </button>
-            </div>
-            {isAsking && (
-              <div className="mt-3 flex gap-1">
-                <div
-                  className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                />
-                <div
-                  className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                />
-                <div
-                  className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                />
-              </div>
-            )}
-            {answer && !isAsking && (
-              <div className="mt-3 bg-white border border-[#C7C7F0] rounded-lg p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {answer}
-              </div>
-            )}
-          </div>
+          <span className="text-xs font-semibold text-[#0F6E56] bg-[#E1F5EE] px-3 py-1 rounded-full">
+            ✓ Analysis complete
+          </span>
         </div>
 
-        {/* Executive Summary */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 border-l-4 border-l-[#5B5BD6] rounded-xl p-5">
+        {/* 1. Executive summary */}
+        <div
+          className="bg-white rounded-xl p-5"
+          style={{
+            border: "1px solid #e2e8f0",
+            borderLeft: "4px solid #5B5BD6",
+          }}
+        >
           <div className="text-xs font-semibold uppercase tracking-wider text-[#5B5BD6] mb-2">
-            Executive Summary
+            EXECUTIVE SUMMARY
           </div>
-          <p className="text-base text-gray-800 dark:text-gray-100 leading-relaxed">
+          <p className="text-base text-gray-800 leading-relaxed">
             {analysis.executiveSummary}
           </p>
         </div>
 
-        {/* Red Flags banner */}
+        {/* 2. Four signal pills */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {pills.map((p) => {
+            const ts = toneStyles[p.tone];
+            return (
+              <div
+                key={p.label}
+                className="rounded-lg px-3 py-2"
+                style={{
+                  backgroundColor: ts.bg,
+                  border: `1px solid ${ts.border}`,
+                }}
+              >
+                <div
+                  className="text-[10px] font-semibold uppercase tracking-wider opacity-80"
+                  style={{ color: ts.t }}
+                >
+                  {p.label}
+                </div>
+                <div
+                  className="text-sm font-bold mt-0.5"
+                  style={{ color: ts.t }}
+                >
+                  {p.value}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 3. Red flags banner */}
         {flags.length > 0 && (
           <div className="bg-[#FCEBEB] border border-[#F09595] rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[#A32D2D] text-base">⚠</span>
+              <span className="text-[#A32D2D] text-base" aria-hidden="true">⚠</span>
               <span className="text-sm font-semibold text-[#A32D2D]">
                 Red flags
               </span>
             </div>
-            <ul className="space-y-1.5 ml-6 list-disc text-[#7a2424]">
+            <ul className="ml-7 list-disc text-[#7a2424] space-y-1">
               {flags.map((f, i) => (
                 <li key={i} className="text-sm leading-relaxed">
                   {f}
@@ -648,318 +725,391 @@ export default function AIAnalysisCard({ companyNumber, companyName, directorApp
           </div>
         )}
 
-        {/* Financial performance / Balance sheet / Cash position */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {fp && (
-            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-              <div className="text-sm font-semibold mb-2">
-                Financial performance
-              </div>
-              {fp.summary && (
-                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3">
-                  {fp.summary}
-                </p>
-              )}
-              {[
-                { label: "Revenue growth", value: fp.revenueGrowth },
-                { label: "Margins", value: fp.marginAnalysis },
-                { label: "YoY trend", value: fp.yearOnYearTrend },
-              ]
-                .filter((r) => r.value && !isMuted(r.value))
-                .map(({ label, value }) => (
-                  <div
-                    key={label}
-                    className="flex flex-col py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
-                  >
-                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      {label}
-                    </span>
-                    <span className="text-sm text-gray-700 dark:text-gray-200 leading-snug mt-0.5">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-          {bs && (
-            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-              <div className="text-sm font-semibold mb-2">Balance sheet</div>
-              {bs.summary && (
-                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3">
-                  {bs.summary}
-                </p>
-              )}
-              {[
-                { label: "Assets", value: bs.assets },
-                { label: "Debt", value: bs.debt },
-                { label: "Working capital", value: bs.workingCapital },
-              ]
-                .filter((r) => r.value && !isMuted(r.value))
-                .map(({ label, value }) => (
-                  <div
-                    key={label}
-                    className="flex flex-col py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
-                  >
-                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      {label}
-                    </span>
-                    <span className="text-sm text-gray-700 dark:text-gray-200 leading-snug mt-0.5">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-          {cp && (
-            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-              <div className="text-sm font-semibold mb-2">Cash position</div>
-              {cp.summary && (
-                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3">
-                  {cp.summary}
-                </p>
-              )}
-              {[
-                { label: "Cash & equivalents", value: cp.cashAndEquivalents },
-                { label: "Cash conversion", value: cp.cashConversion },
-                { label: "Liquidity risk", value: cp.liquidityRisk },
-              ]
-                .filter((r) => r.value && !isMuted(r.value))
-                .map(({ label, value }) => (
-                  <div
-                    key={label}
-                    className="flex flex-col py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
-                  >
-                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      {label}
-                    </span>
-                    <span className="text-sm text-gray-700 dark:text-gray-200 leading-snug mt-0.5">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-
-        {/* Management commentary */}
-        {mc && (mc.summary || mc.keyThemes.length > 0 || mc.assessment) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <div className="text-sm font-semibold mb-2">
-              Management commentary
-            </div>
-            {mc.summary && (
-              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
-                {mc.summary}
-              </p>
-            )}
-            {mc.keyThemes.length > 0 && (
-              <ul className="space-y-1.5 ml-5 list-disc mb-3">
-                {mc.keyThemes.map((t, i) => (
-                  <li
-                    key={i}
-                    className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
-                  >
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {mc.assessment && (
-              <div className="bg-[#F5F5FF] border border-[#C7C7F0] rounded-lg p-3">
-                <p className="text-sm italic text-gray-700 dark:text-gray-200 leading-relaxed">
-                  {mc.assessment}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Auditor & going concern */}
-        {ag && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <div className="text-sm font-semibold mb-3">
-              Auditor & going concern
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
-                  Auditor
-                </div>
-                <div className="text-sm text-gray-700 dark:text-gray-200">
-                  {ag.auditorName || "Not disclosed"}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
-                  Opinion
-                </div>
-                <div className="text-sm text-gray-700 dark:text-gray-200">
-                  {ag.auditOpinion || "Not disclosed"}
-                </div>
-              </div>
-            </div>
-            {ag.goingConcernFlag ? (
-              <div className="bg-[#FCEBEB] border border-[#F09595] rounded-lg p-3 mb-2">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[#A32D2D]">⚠</span>
-                  <span className="text-sm font-semibold text-[#A32D2D]">
-                    Going concern issue raised
-                  </span>
-                </div>
-                {ag.goingConcernDetail && (
-                  <p className="text-sm text-[#7a2424] leading-relaxed">
-                    {ag.goingConcernDetail}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="bg-[#E1F5EE] border border-[#5DCAA5] rounded-lg p-3 mb-2">
-                <span className="text-sm text-[#0F6E56] font-medium">
-                  ✓ No going concern issues noted.
-                </span>
-              </div>
-            )}
-            {ag.emphasisOfMatter && !isMuted(ag.emphasisOfMatter) && (
-              <div className="mt-2">
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
-                  Emphasis of matter
-                </div>
-                <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
-                  {ag.emphasisOfMatter}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Related party transactions */}
-        {rp && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <div className="text-sm font-semibold mb-2">
-              Related party transactions
-            </div>
-            {rp.transactions.length === 0 ? (
-              <p className="text-sm text-gray-500 italic">
-                None disclosed in these accounts.
-              </p>
-            ) : (
+        {/* 4. Accordion sections */}
+        <div className="flex flex-col" style={{ gap: "6px" }}>
+          {fp &&
+            renderRow(
+              "financial",
+              "Financial performance",
+              fpStatus || "—",
+              fpTone,
               <>
-                {rp.summary && (
-                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
-                    {rp.summary}
+                {fp.summary && !isMuted(fp.summary) && (
+                  <p style={{ marginBottom: "10px", color: "#334155" }}>
+                    {fp.summary}
                   </p>
                 )}
-                <ul className="space-y-1.5 ml-5 list-disc mb-3">
-                  {rp.transactions.map((t, i) => (
-                    <li
-                      key={i}
-                      className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
-                    >
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-                {rp.assessment && (
-                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
-                    {rp.assessment}
+                {labelledRow("Revenue growth", fp.revenueGrowth)}
+                {labelledRow("Margin analysis", fp.marginAnalysis)}
+                {labelledRow("YoY trend", fp.yearOnYearTrend)}
+              </>
+            )}
+
+          {(bs || cp) &&
+            renderRow(
+              "balance",
+              "Balance sheet & cash",
+              bsStatus || "—",
+              bsTone,
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "20px",
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#5B5BD6",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    Balance sheet
+                  </div>
+                  {bs?.summary && !isMuted(bs.summary) && (
+                    <p style={{ marginBottom: "8px", color: "#334155" }}>
+                      {bs.summary}
+                    </p>
+                  )}
+                  {labelledRow("Assets", bs?.assets)}
+                  {labelledRow("Debt", bs?.debt)}
+                  {labelledRow("Working capital", bs?.workingCapital)}
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "#5B5BD6",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    Cash
+                  </div>
+                  {cp?.summary && !isMuted(cp.summary) && (
+                    <p style={{ marginBottom: "8px", color: "#334155" }}>
+                      {cp.summary}
+                    </p>
+                  )}
+                  {labelledRow("Cash & equivalents", cp?.cashAndEquivalents)}
+                  {labelledRow("Cash conversion", cp?.cashConversion)}
+                  {labelledRow("Liquidity risk", cp?.liquidityRisk)}
+                </div>
+              </div>
+            )}
+
+          {mc &&
+            renderRow(
+              "management",
+              "Management commentary",
+              mcStatus,
+              mcTone,
+              <>
+                {mc.summary && !isMuted(mc.summary) && (
+                  <p style={{ marginBottom: "10px", color: "#334155" }}>
+                    {mc.summary}
                   </p>
+                )}
+                {mc.keyThemes && mc.keyThemes.length > 0 && (
+                  <ul
+                    style={{
+                      margin: "0 0 10px 20px",
+                      listStyle: "disc",
+                      color: "#475569",
+                    }}
+                  >
+                    {mc.keyThemes.map((t, i) => (
+                      <li key={i} style={{ marginBottom: "2px" }}>
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {mc.assessment && !isMuted(mc.assessment) && (
+                  <div
+                    style={{
+                      backgroundColor: "#F5F5FF",
+                      border: "1px solid #C7C7F0",
+                      borderRadius: "6px",
+                      padding: "10px 12px",
+                      fontStyle: "italic",
+                      color: "#3D3D9E",
+                    }}
+                  >
+                    {mc.assessment}
+                  </div>
                 )}
               </>
             )}
-          </div>
-        )}
 
-        {/* Key risks */}
-        {kr && (kr.summary || kr.risks.length > 0) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <div className="text-sm font-semibold mb-2">Key risks</div>
-            {kr.summary && (
-              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
-                {kr.summary}
-              </p>
-            )}
-            {kr.risks.length > 0 && (
-              <ul className="space-y-1.5 ml-5 list-disc">
-                {kr.risks.map((r, i) => (
-                  <li
-                    key={i}
-                    className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
-                  >
-                    {r}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Strategic direction (2-col) */}
-        {sdNew && ((sdNew.initiatives && sdNew.initiatives.length > 0) || sdNew.outlook || sdNew.summary) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
-            <div className="text-sm font-semibold mb-3">Strategic direction</div>
-            {sdNew.summary && (
-              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
-                {sdNew.summary}
-              </p>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
-                  Initiatives
+          {ag &&
+            renderRow(
+              "auditor",
+              "Auditor & going concern",
+              agStatus,
+              agTone,
+              <>
+                {labelledRow("Auditor", ag.auditorName)}
+                {labelledRow("Opinion", ag.auditOpinion)}
+                <div style={{ padding: "6px 0" }}>
+                  {ag.goingConcernFlag ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "8px",
+                        color: "#A32D2D",
+                      }}
+                    >
+                      <span aria-hidden="true">⚠</span>
+                      <span>
+                        <strong>Going concern issue raised.</strong>
+                        {ag.goingConcernDetail && !isMuted(ag.goingConcernDetail)
+                          ? ` ${ag.goingConcernDetail}`
+                          : ""}
+                      </span>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        color: "#0F6E56",
+                      }}
+                    >
+                      <span aria-hidden="true">✓</span>
+                      <span>No going concern issues noted.</span>
+                    </div>
+                  )}
                 </div>
-                {sdNew.initiatives && sdNew.initiatives.length > 0 ? (
-                  <ul className="space-y-1.5 ml-5 list-disc">
-                    {sdNew.initiatives.map((i: string, ix: number) => (
-                      <li
-                        key={ix}
-                        className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
-                      >
-                        {i}
+                {labelledRow("Emphasis of matter", ag.emphasisOfMatter)}
+              </>
+            )}
+
+          {rp &&
+            renderRow(
+              "related",
+              "Related party transactions",
+              rpStatus,
+              rpTone,
+              <>
+                {rp.summary && !isMuted(rp.summary) && (
+                  <p style={{ marginBottom: "10px", color: "#334155" }}>
+                    {rp.summary}
+                  </p>
+                )}
+                {rp.transactions && rp.transactions.length > 0 ? (
+                  <ul
+                    style={{
+                      margin: "0 0 10px 20px",
+                      listStyle: "disc",
+                      color: "#475569",
+                    }}
+                  >
+                    {rp.transactions.map((t, i) => (
+                      <li key={i} style={{ marginBottom: "2px" }}>
+                        {t}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">None mentioned</p>
+                  <p style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                    None disclosed in these accounts.
+                  </p>
                 )}
-              </div>
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
-                  Outlook
-                </div>
-                <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
-                  {sdNew.outlook || "Not stated"}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+                {rp.assessment && !isMuted(rp.assessment) && (
+                  <p style={{ color: "#334155" }}>{rp.assessment}</p>
+                )}
+              </>
+            )}
 
-        {/* Filing behaviour (slim) */}
-        {fb && (fb.accountsMadeUpTo || fb.accountsType || fb.filingPattern) && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-3">
-            <div className="flex flex-wrap gap-x-6 gap-y-2 items-baseline">
-              {[
-                { label: "Made up to", value: fb.accountsMadeUpTo },
-                { label: "Accounts type", value: fb.accountsType },
-                { label: "Filing pattern", value: fb.filingPattern },
-              ]
-                .filter((x) => x.value && !isMuted(x.value))
-                .map(({ label, value }) => (
-                  <div
-                    key={label}
-                    className="flex items-baseline gap-2"
+          {kr &&
+            renderRow(
+              "risks",
+              "Key risks",
+              krStatus,
+              krTone,
+              <>
+                {kr.summary && !isMuted(kr.summary) && (
+                  <p style={{ marginBottom: "10px", color: "#334155" }}>
+                    {kr.summary}
+                  </p>
+                )}
+                {kr.risks && kr.risks.length > 0 ? (
+                  <ul
+                    style={{
+                      margin: "0 0 0 20px",
+                      listStyle: "disc",
+                      color: "#475569",
+                    }}
                   >
-                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                      {label}
-                    </span>
-                    <span className="text-sm text-gray-700 dark:text-gray-200">
-                      {value}
-                    </span>
+                    {kr.risks.map((r, i) => (
+                      <li key={i} style={{ marginBottom: "4px" }}>
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                    No specific risks identified.
+                  </p>
+                )}
+              </>
+            )}
+
+          {sdNew &&
+            renderRow(
+              "strategic",
+              "Strategic direction",
+              sdStatus,
+              sdTone,
+              <>
+                {sdNew.summary && !isMuted(sdNew.summary) && (
+                  <p style={{ marginBottom: "10px", color: "#334155" }}>
+                    {sdNew.summary}
+                  </p>
+                )}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "20px",
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      Initiatives
+                    </div>
+                    {sdNew.initiatives && sdNew.initiatives.length > 0 ? (
+                      <ul
+                        style={{
+                          margin: "0 0 0 20px",
+                          listStyle: "disc",
+                          color: "#475569",
+                        }}
+                      >
+                        {sdNew.initiatives.map((i, ix) => (
+                          <li key={ix} style={{ marginBottom: "2px" }}>
+                            {i}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                        None mentioned
+                      </p>
+                    )}
                   </div>
-                ))}
-            </div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#64748b",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      Outlook
+                    </div>
+                    <p style={{ color: "#334155" }}>
+                      {sdNew.outlook || "Not stated"}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
+          {fb &&
+            renderRow(
+              "filing",
+              "Filing behaviour",
+              fbStatus,
+              fbTone,
+              <>
+                {labelledRow("Made up to", fb.accountsMadeUpTo)}
+                {labelledRow("Accounts type", fb.accountsType)}
+                {labelledRow("Filing pattern", fb.filingPattern)}
+              </>
+            )}
+        </div>
+
+        {/* Ask AI panel — sits below all accordion sections */}
+        <div className="bg-[#F5F5FF] border border-[#C7C7F0] rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
+            <span className="text-sm font-bold text-[#3D3D9E]">
+              Ask AI about this company
+            </span>
           </div>
-        )}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {suggestedQuestions.map((q) => (
+              <button
+                key={q}
+                onClick={() => handleAsk(q)}
+                className="text-xs text-[#5B5BD6] bg-white border border-[#C7C7F0] rounded-full px-3 py-1 hover:bg-[#EEEEFF] transition-colors text-left"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAsk()}
+              placeholder={`Ask anything about ${companyName || "this company"}...`}
+              className="flex-1 border border-[#C7C7F0] rounded-lg px-3 py-2 text-sm bg-white text-gray-800 outline-none focus:border-[#5B5BD6]"
+            />
+            <button
+              onClick={() => handleAsk()}
+              disabled={isAsking || !question.trim()}
+              className="bg-[#5B5BD6] text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-[#4A4AC5] transition-colors"
+            >
+              {isAsking ? "..." : "Ask"}
+            </button>
+          </div>
+          {isAsking && (
+            <div className="mt-3 flex gap-1">
+              <div
+                className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <div
+                className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <div
+                className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
+            </div>
+          )}
+          {answer && !isAsking && (
+            <div className="mt-3 bg-white border border-[#C7C7F0] rounded-lg p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {answer}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
