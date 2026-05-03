@@ -69,16 +69,79 @@ export interface ComplianceSignals {
 }
 
 export interface AccountsAnalysis {
-  financialHealth: FinancialHealth;
-  margins: Margins;
-  balanceSheet: BalanceSheet;
-  cashFlowSignals: CashFlowSignals;
-  directorFlags: DirectorFlags;
-  strategicDirection: StrategicDirection;
-  risksAndWarnings: RisksAndWarnings;
-  auditOpinion: AuditOpinion;
-  complianceSignals: ComplianceSignals;
-  // Metadata added by our route — not part of the AI response
+  // ── New 12-section format ───────────────────────────────────────────────
+  // Optional so cached old-format analyses and existing fallback providers
+  // continue to satisfy the type. The component checks `executiveSummary` at
+  // runtime to decide which layout to render.
+  executiveSummary?: string;
+  financialPerformance?: {
+    summary: string;
+    revenueGrowth: string;
+    marginAnalysis: string;
+    yearOnYearTrend: string;
+  };
+  balanceSheetStrength?: {
+    summary: string;
+    assets: string;
+    debt: string;
+    workingCapital: string;
+  };
+  cashPosition?: {
+    summary: string;
+    cashAndEquivalents: string;
+    cashConversion: string;
+    liquidityRisk: string;
+  };
+  managementCommentary?: {
+    summary: string;
+    keyThemes: string[];
+    assessment: string;
+  };
+  auditorAndGoingConcern?: {
+    auditorName: string;
+    auditOpinion: string;
+    goingConcernFlag: boolean;
+    goingConcernDetail: string;
+    emphasisOfMatter: string;
+  };
+  relatedPartyTransactions?: {
+    summary: string;
+    transactions: string[];
+    assessment: string;
+  };
+  filingBehaviour?: {
+    accountsMadeUpTo: string;
+    filingPattern: string;
+    accountsType: string;
+  };
+  keyRisks?: {
+    summary: string;
+    risks: string[];
+  };
+  creditAssessment?: {
+    overallRating: string;
+    ratingRationale: string;
+    keyStrengths: string[];
+    keyConcerns: string[];
+  };
+  redFlags?: string[];
+
+  // ── Legacy fields (still produced by the existing parser & cache) ───────
+  // Typed as `any` so the legacy rendering path keeps compiling without
+  // touching every consumer.
+  financialHealth?: any;
+  margins?: any;
+  balanceSheet?: any;
+  cashFlowSignals?: any;
+  directorFlags?: any;
+  // Note: `strategicDirection` is shared between old and new formats with
+  // different shapes. Typed as `any` so both shapes work.
+  strategicDirection?: any;
+  risksAndWarnings?: any;
+  auditOpinion?: any;
+  complianceSignals?: any;
+
+  // ── Metadata added by our route — not part of the AI response ───────────
   analysedAt: string;
   companyNumber: string;
   documentDate?: string;

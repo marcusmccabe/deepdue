@@ -379,7 +379,90 @@ export async function GET(request: NextRequest) {
       yoyChange: x?.yoyChange ?? "n/a",
     });
 
+    const strArray = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
     analysis = {
+      // ── New 12-section format ────────────────────────────────────────
+      executiveSummary:
+        typeof parsed.executiveSummary === "string"
+          ? parsed.executiveSummary
+          : undefined,
+      financialPerformance: parsed.financialPerformance
+        ? {
+            summary: parsed.financialPerformance.summary ?? "",
+            revenueGrowth: parsed.financialPerformance.revenueGrowth ?? "",
+            marginAnalysis: parsed.financialPerformance.marginAnalysis ?? "",
+            yearOnYearTrend: parsed.financialPerformance.yearOnYearTrend ?? "",
+          }
+        : undefined,
+      balanceSheetStrength: parsed.balanceSheetStrength
+        ? {
+            summary: parsed.balanceSheetStrength.summary ?? "",
+            assets: parsed.balanceSheetStrength.assets ?? "",
+            debt: parsed.balanceSheetStrength.debt ?? "",
+            workingCapital: parsed.balanceSheetStrength.workingCapital ?? "",
+          }
+        : undefined,
+      cashPosition: parsed.cashPosition
+        ? {
+            summary: parsed.cashPosition.summary ?? "",
+            cashAndEquivalents: parsed.cashPosition.cashAndEquivalents ?? "",
+            cashConversion: parsed.cashPosition.cashConversion ?? "",
+            liquidityRisk: parsed.cashPosition.liquidityRisk ?? "",
+          }
+        : undefined,
+      managementCommentary: parsed.managementCommentary
+        ? {
+            summary: parsed.managementCommentary.summary ?? "",
+            keyThemes: strArray(parsed.managementCommentary.keyThemes),
+            assessment: parsed.managementCommentary.assessment ?? "",
+          }
+        : undefined,
+      auditorAndGoingConcern: parsed.auditorAndGoingConcern
+        ? {
+            auditorName: parsed.auditorAndGoingConcern.auditorName ?? "",
+            auditOpinion: parsed.auditorAndGoingConcern.auditOpinion ?? "",
+            goingConcernFlag: Boolean(
+              parsed.auditorAndGoingConcern.goingConcernFlag
+            ),
+            goingConcernDetail:
+              parsed.auditorAndGoingConcern.goingConcernDetail ?? "",
+            emphasisOfMatter:
+              parsed.auditorAndGoingConcern.emphasisOfMatter ?? "",
+          }
+        : undefined,
+      relatedPartyTransactions: parsed.relatedPartyTransactions
+        ? {
+            summary: parsed.relatedPartyTransactions.summary ?? "",
+            transactions: strArray(parsed.relatedPartyTransactions.transactions),
+            assessment: parsed.relatedPartyTransactions.assessment ?? "",
+          }
+        : undefined,
+      filingBehaviour: parsed.filingBehaviour
+        ? {
+            accountsMadeUpTo: parsed.filingBehaviour.accountsMadeUpTo ?? "",
+            filingPattern: parsed.filingBehaviour.filingPattern ?? "",
+            accountsType: parsed.filingBehaviour.accountsType ?? "",
+          }
+        : undefined,
+      keyRisks: parsed.keyRisks
+        ? {
+            summary: parsed.keyRisks.summary ?? "",
+            risks: strArray(parsed.keyRisks.risks),
+          }
+        : undefined,
+      creditAssessment: parsed.creditAssessment
+        ? {
+            overallRating: parsed.creditAssessment.overallRating ?? "",
+            ratingRationale: parsed.creditAssessment.ratingRationale ?? "",
+            keyStrengths: strArray(parsed.creditAssessment.keyStrengths),
+            keyConcerns: strArray(parsed.creditAssessment.keyConcerns),
+          }
+        : undefined,
+      redFlags: strArray(parsed.redFlags),
+
+      // ── Legacy fields (preserved for backwards compatibility) ────────
       financialHealth: {
         revenue: {
           value: parsed.financialHealth?.revenue?.value ?? null,
@@ -412,14 +495,30 @@ export async function GET(request: NextRequest) {
           parsed.directorFlags?.relatedPartyTransactions ?? "None disclosed",
         remunerationNotes: parsed.directorFlags?.remunerationNotes ?? "Not disclosed",
       },
-      strategicDirection: {
-        managementOutlook: parsed.strategicDirection?.managementOutlook ?? "",
-        marketsOrGeographies:
-          parsed.strategicDirection?.marketsOrGeographies ?? "Not mentioned",
-        acquisitionsOrRestructuring:
-          parsed.strategicDirection?.acquisitionsOrRestructuring ?? "None mentioned",
-        rdOrInvestment: parsed.strategicDirection?.rdOrInvestment ?? "Not mentioned",
-      },
+      // strategicDirection has different shapes between the old and new
+      // formats. Detect the new shape (`summary`/`initiatives`/`outlook`) and
+      // preserve it; otherwise build the legacy shape.
+      strategicDirection:
+        parsed.strategicDirection &&
+        (typeof parsed.strategicDirection.summary === "string" ||
+          Array.isArray(parsed.strategicDirection.initiatives) ||
+          typeof parsed.strategicDirection.outlook === "string")
+          ? {
+              summary: parsed.strategicDirection.summary ?? "",
+              initiatives: strArray(parsed.strategicDirection.initiatives),
+              outlook: parsed.strategicDirection.outlook ?? "",
+            }
+          : {
+              managementOutlook:
+                parsed.strategicDirection?.managementOutlook ?? "",
+              marketsOrGeographies:
+                parsed.strategicDirection?.marketsOrGeographies ?? "Not mentioned",
+              acquisitionsOrRestructuring:
+                parsed.strategicDirection?.acquisitionsOrRestructuring ??
+                "None mentioned",
+              rdOrInvestment:
+                parsed.strategicDirection?.rdOrInvestment ?? "Not mentioned",
+            },
       risksAndWarnings: {
         explicitRisks: Array.isArray(parsed.risksAndWarnings?.explicitRisks)
           ? parsed.risksAndWarnings.explicitRisks

@@ -431,6 +431,540 @@ export default function AIAnalysisCard({ companyNumber, companyName, directorApp
   // ── Success ───────────────────────────────────────────────────────────────
   if (!analysis) return null;
 
+  // ── NEW 12-section layout (only when the API returns the new schema) ─────
+  if (analysis.executiveSummary) {
+    const fp = analysis.financialPerformance;
+    const bs = analysis.balanceSheetStrength;
+    const cp = analysis.cashPosition;
+    const mc = analysis.managementCommentary;
+    const ag = analysis.auditorAndGoingConcern;
+    const rp = analysis.relatedPartyTransactions;
+    const fb = analysis.filingBehaviour;
+    const kr = analysis.keyRisks;
+    // strategicDirection has the new shape here
+    const sdNew = analysis.strategicDirection as
+      | { summary: string; initiatives: string[]; outlook: string }
+      | undefined;
+    const ca = analysis.creditAssessment;
+    const flags = analysis.redFlags ?? [];
+
+    const ratingText = (ca?.overallRating ?? "").toLowerCase();
+    const creditRisk: "Low" | "Medium" | "High" = ratingText.includes("high")
+      ? "High"
+      : ratingText.includes("low")
+      ? "Low"
+      : "Medium";
+
+    const liquidityText = (cp?.liquidityRisk ?? "").toLowerCase();
+    const cashHealth: "Adequate" | "Weak" =
+      liquidityText && /weak|concern|stretched|risk|tight|insufficient/.test(liquidityText)
+        ? "Weak"
+        : "Adequate";
+
+    const dirRisk: "Low" | "Medium" =
+      (rp?.transactions?.length ?? 0) > 0 ? "Medium" : "Low";
+
+    const tone: Record<string, { bg: string; t: string }> = {
+      Low: { bg: "bg-[#E1F5EE] border-[#5DCAA5]", t: "text-[#0F6E56]" },
+      Medium: { bg: "bg-[#FAEEDA] border-[#EF9F27]", t: "text-[#854F0B]" },
+      High: { bg: "bg-[#FCEBEB] border-[#F09595]", t: "text-[#A32D2D]" },
+      Adequate: { bg: "bg-[#E1F5EE] border-[#5DCAA5]", t: "text-[#0F6E56]" },
+      Weak: { bg: "bg-[#FCEBEB] border-[#F09595]", t: "text-[#A32D2D]" },
+    };
+
+    const creditBullets =
+      creditRisk === "Low"
+        ? (ca?.keyStrengths ?? []).slice(0, 3)
+        : (ca?.keyConcerns ?? []).slice(0, 3);
+    const cashBullets =
+      cp?.liquidityRisk && !isMuted(cp.liquidityRisk) ? [cp.liquidityRisk] : [];
+    const dirBullets = (rp?.transactions ?? []).slice(0, 3);
+
+    return (
+      <div className="space-y-3">
+        {/* Header card with status, risk cards, Ask AI panel */}
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-[#5B5BD6] rounded-md flex items-center justify-center text-white text-xs font-bold">
+                ✦
+              </div>
+              <div>
+                <div className="text-sm font-semibold leading-tight">
+                  AI Document Intelligence
+                </div>
+                <div className="text-xs text-gray-400">
+                  Extracted from filed accounts
+                </div>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-[#0F6E56] bg-[#E1F5EE] px-3 py-1 rounded-full">
+              ✓ Analysis complete
+            </span>
+          </div>
+
+          {/* Three risk summary cards with bullet points */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            {[
+              {
+                label: "Credit risk",
+                val: creditRisk as string,
+                sub: ca?.ratingRationale || "Based on credit assessment",
+                bullets: creditBullets,
+              },
+              {
+                label: "Cash health",
+                val: cashHealth as string,
+                sub: cp?.cashAndEquivalents || "Liquidity position",
+                bullets: cashBullets,
+              },
+              {
+                label: "Director risk",
+                val: dirRisk as string,
+                sub: rp?.summary || "Based on related-party disclosures",
+                bullets: dirBullets,
+              },
+            ].map(({ label, val, sub, bullets }) => (
+              <div
+                key={label}
+                className={`rounded-lg p-3 border ${tone[val]?.bg ?? ""}`}
+              >
+                <div
+                  className={`text-xs font-semibold uppercase tracking-wide mb-1 ${tone[val]?.t ?? ""}`}
+                >
+                  {label}
+                </div>
+                <div className={`text-sm font-bold ${tone[val]?.t ?? ""}`}>
+                  {val}
+                </div>
+                <div
+                  className={`text-xs mt-1 ${tone[val]?.t ?? ""} opacity-80 leading-snug`}
+                >
+                  {sub}
+                </div>
+                {bullets.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {bullets.map((b: string, i: number) => (
+                      <li
+                        key={i}
+                        className={`text-xs ${tone[val]?.t ?? ""} opacity-90 flex gap-1.5`}
+                      >
+                        <span>•</span>
+                        <span className="leading-snug">{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Ask AI panel */}
+          <div className="bg-[#F5F5FF] border border-[#C7C7F0] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[#5B5BD6] text-sm font-bold">✦</span>
+              <span className="text-sm font-bold text-[#3D3D9E]">
+                Ask AI about this company
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {suggestedQuestions.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => handleAsk(q)}
+                  className="text-xs text-[#5B5BD6] bg-white border border-[#C7C7F0] rounded-full px-3 py-1 hover:bg-[#EEEEFF] transition-colors text-left"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAsk()}
+                placeholder={`Ask anything about ${companyName || "this company"}...`}
+                className="flex-1 border border-[#C7C7F0] rounded-lg px-3 py-2 text-sm bg-white text-gray-800 outline-none focus:border-[#5B5BD6]"
+              />
+              <button
+                onClick={() => handleAsk()}
+                disabled={isAsking || !question.trim()}
+                className="bg-[#5B5BD6] text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-[#4A4AC5] transition-colors"
+              >
+                {isAsking ? "..." : "Ask"}
+              </button>
+            </div>
+            {isAsking && (
+              <div className="mt-3 flex gap-1">
+                <div
+                  className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                />
+                <div
+                  className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                />
+                <div
+                  className="w-2 h-2 bg-[#5B5BD6] rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                />
+              </div>
+            )}
+            {answer && !isAsking && (
+              <div className="mt-3 bg-white border border-[#C7C7F0] rounded-lg p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {answer}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Executive Summary */}
+        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 border-l-4 border-l-[#5B5BD6] rounded-xl p-5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[#5B5BD6] mb-2">
+            Executive Summary
+          </div>
+          <p className="text-base text-gray-800 dark:text-gray-100 leading-relaxed">
+            {analysis.executiveSummary}
+          </p>
+        </div>
+
+        {/* Red Flags banner */}
+        {flags.length > 0 && (
+          <div className="bg-[#FCEBEB] border border-[#F09595] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[#A32D2D] text-base">⚠</span>
+              <span className="text-sm font-semibold text-[#A32D2D]">
+                Red flags
+              </span>
+            </div>
+            <ul className="space-y-1.5 ml-6 list-disc text-[#7a2424]">
+              {flags.map((f, i) => (
+                <li key={i} className="text-sm leading-relaxed">
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Financial performance / Balance sheet / Cash position */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {fp && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+              <div className="text-sm font-semibold mb-2">
+                Financial performance
+              </div>
+              {fp.summary && (
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3">
+                  {fp.summary}
+                </p>
+              )}
+              {[
+                { label: "Revenue growth", value: fp.revenueGrowth },
+                { label: "Margins", value: fp.marginAnalysis },
+                { label: "YoY trend", value: fp.yearOnYearTrend },
+              ]
+                .filter((r) => r.value && !isMuted(r.value))
+                .map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="flex flex-col py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
+                  >
+                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      {label}
+                    </span>
+                    <span className="text-sm text-gray-700 dark:text-gray-200 leading-snug mt-0.5">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+          {bs && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+              <div className="text-sm font-semibold mb-2">Balance sheet</div>
+              {bs.summary && (
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3">
+                  {bs.summary}
+                </p>
+              )}
+              {[
+                { label: "Assets", value: bs.assets },
+                { label: "Debt", value: bs.debt },
+                { label: "Working capital", value: bs.workingCapital },
+              ]
+                .filter((r) => r.value && !isMuted(r.value))
+                .map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="flex flex-col py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
+                  >
+                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      {label}
+                    </span>
+                    <span className="text-sm text-gray-700 dark:text-gray-200 leading-snug mt-0.5">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+          {cp && (
+            <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+              <div className="text-sm font-semibold mb-2">Cash position</div>
+              {cp.summary && (
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-3">
+                  {cp.summary}
+                </p>
+              )}
+              {[
+                { label: "Cash & equivalents", value: cp.cashAndEquivalents },
+                { label: "Cash conversion", value: cp.cashConversion },
+                { label: "Liquidity risk", value: cp.liquidityRisk },
+              ]
+                .filter((r) => r.value && !isMuted(r.value))
+                .map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="flex flex-col py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
+                  >
+                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      {label}
+                    </span>
+                    <span className="text-sm text-gray-700 dark:text-gray-200 leading-snug mt-0.5">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+
+        {/* Management commentary */}
+        {mc && (mc.summary || mc.keyThemes.length > 0 || mc.assessment) && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+            <div className="text-sm font-semibold mb-2">
+              Management commentary
+            </div>
+            {mc.summary && (
+              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
+                {mc.summary}
+              </p>
+            )}
+            {mc.keyThemes.length > 0 && (
+              <ul className="space-y-1.5 ml-5 list-disc mb-3">
+                {mc.keyThemes.map((t, i) => (
+                  <li
+                    key={i}
+                    className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
+                  >
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {mc.assessment && (
+              <div className="bg-[#F5F5FF] border border-[#C7C7F0] rounded-lg p-3">
+                <p className="text-sm italic text-gray-700 dark:text-gray-200 leading-relaxed">
+                  {mc.assessment}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Auditor & going concern */}
+        {ag && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+            <div className="text-sm font-semibold mb-3">
+              Auditor & going concern
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+                  Auditor
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-200">
+                  {ag.auditorName || "Not disclosed"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+                  Opinion
+                </div>
+                <div className="text-sm text-gray-700 dark:text-gray-200">
+                  {ag.auditOpinion || "Not disclosed"}
+                </div>
+              </div>
+            </div>
+            {ag.goingConcernFlag ? (
+              <div className="bg-[#FCEBEB] border border-[#F09595] rounded-lg p-3 mb-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[#A32D2D]">⚠</span>
+                  <span className="text-sm font-semibold text-[#A32D2D]">
+                    Going concern issue raised
+                  </span>
+                </div>
+                {ag.goingConcernDetail && (
+                  <p className="text-sm text-[#7a2424] leading-relaxed">
+                    {ag.goingConcernDetail}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-[#E1F5EE] border border-[#5DCAA5] rounded-lg p-3 mb-2">
+                <span className="text-sm text-[#0F6E56] font-medium">
+                  ✓ No going concern issues noted.
+                </span>
+              </div>
+            )}
+            {ag.emphasisOfMatter && !isMuted(ag.emphasisOfMatter) && (
+              <div className="mt-2">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-1">
+                  Emphasis of matter
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+                  {ag.emphasisOfMatter}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Related party transactions */}
+        {rp && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+            <div className="text-sm font-semibold mb-2">
+              Related party transactions
+            </div>
+            {rp.transactions.length === 0 ? (
+              <p className="text-sm text-gray-500 italic">
+                None disclosed in these accounts.
+              </p>
+            ) : (
+              <>
+                {rp.summary && (
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
+                    {rp.summary}
+                  </p>
+                )}
+                <ul className="space-y-1.5 ml-5 list-disc mb-3">
+                  {rp.transactions.map((t, i) => (
+                    <li
+                      key={i}
+                      className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
+                    >
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+                {rp.assessment && (
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+                    {rp.assessment}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Key risks */}
+        {kr && (kr.summary || kr.risks.length > 0) && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+            <div className="text-sm font-semibold mb-2">Key risks</div>
+            {kr.summary && (
+              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
+                {kr.summary}
+              </p>
+            )}
+            {kr.risks.length > 0 && (
+              <ul className="space-y-1.5 ml-5 list-disc">
+                {kr.risks.map((r, i) => (
+                  <li
+                    key={i}
+                    className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
+                  >
+                    {r}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Strategic direction (2-col) */}
+        {sdNew && ((sdNew.initiatives && sdNew.initiatives.length > 0) || sdNew.outlook || sdNew.summary) && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4">
+            <div className="text-sm font-semibold mb-3">Strategic direction</div>
+            {sdNew.summary && (
+              <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
+                {sdNew.summary}
+              </p>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
+                  Initiatives
+                </div>
+                {sdNew.initiatives && sdNew.initiatives.length > 0 ? (
+                  <ul className="space-y-1.5 ml-5 list-disc">
+                    {sdNew.initiatives.map((i: string, ix: number) => (
+                      <li
+                        key={ix}
+                        className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"
+                      >
+                        {i}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">None mentioned</p>
+                )}
+              </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-400 mb-2">
+                  Outlook
+                </div>
+                <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">
+                  {sdNew.outlook || "Not stated"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Filing behaviour (slim) */}
+        {fb && (fb.accountsMadeUpTo || fb.accountsType || fb.filingPattern) && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl px-4 py-3">
+            <div className="flex flex-wrap gap-x-6 gap-y-2 items-baseline">
+              {[
+                { label: "Made up to", value: fb.accountsMadeUpTo },
+                { label: "Accounts type", value: fb.accountsType },
+                { label: "Filing pattern", value: fb.filingPattern },
+              ]
+                .filter((x) => x.value && !isMuted(x.value))
+                .map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="flex items-baseline gap-2"
+                  >
+                    <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      {label}
+                    </span>
+                    <span className="text-sm text-gray-700 dark:text-gray-200">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── LEGACY rendering (existing layout, unchanged) ────────────────────────
   const fh = analysis.financialHealth;
   const mg = analysis.margins;
   const bs = analysis.balanceSheet;
