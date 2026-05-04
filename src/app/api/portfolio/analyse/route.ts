@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { AccountsAnalysis } from "@/lib/analysis-types";
+import { analyseCompany } from "@/lib/analyse-company";
 
 export const maxDuration = 300;
 
@@ -58,10 +59,6 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Portfolio not found" }), { status: 404 });
   }
 
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
-
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
@@ -75,15 +72,6 @@ export async function POST(request: NextRequest) {
       let errors = 0;
       let cursor = 0;
 
-      async function fetchAnalysis(companyNumber: string): Promise<AccountsAnalysis | null> {
-        const { data } = await supabase
-          .from("analysis_cache")
-          .select("analysis")
-          .eq("company_number", companyNumber)
-          .maybeSingle();
-        return (data?.analysis as AccountsAnalysis | undefined) ?? null;
-      }
-
       async function processOne(companyNumber: string, index: number) {
         try {
           const cutoff = new Date();
@@ -91,7 +79,7 @@ export async function POST(request: NextRequest) {
 
           const { data: cached } = await supabase
             .from("analysis_cache")
-            .select("company_number, cached_at")
+            .select("company_number, cached_at, analysis")
             .eq("company_number", companyNumber)
             .gt("cached_at", cutoff.toISOString())
             .maybeSingle();
@@ -107,7 +95,6 @@ export async function POST(request: NextRequest) {
               .eq("portfolio_id", portfolioId)
               .eq("company_number", companyNumber);
 
-            const analysis = await fetchAnalysis(companyNumber);
             completed += 1;
             send({
               type: "progress",
@@ -115,7 +102,7 @@ export async function POST(request: NextRequest) {
               total: companyNumbers.length,
               companyNumber,
               status: "cached",
-              analysis,
+              analysis: (cached.analysis as AccountsAnalysis | undefined) ?? null,
               lastAnalysedAt,
             });
             return;
@@ -127,31 +114,7 @@ export async function POST(request: NextRequest) {
             .eq("portfolio_id", portfolioId)
             .eq("company_number", companyNumber);
 
-          const cookieHeader = request.headers.get("cookie") ?? "";
-          const res = await fetch(
-            `${baseUrl}/api/analyse-accounts?companyNumber=${encodeURIComponent(companyNumber)}`,
-            { headers: { cookie: cookieHeader }, cache: "no-store" }
-          );
-
-          if (!res.ok) {
-            const errBody = await res.text().catch(() => "");
-            await supabase
-              .from("portfolio_companies")
-              .update({ analysis_status: "error" })
-              .eq("portfolio_id", portfolioId)
-              .eq("company_number", companyNumber);
-
-            errors += 1;
-            send({
-              type: "progress",
-              index,
-              total: companyNumbers.length,
-              companyNumber,
-              status: "error",
-              error: errBody.slice(0, 200) || `HTTP ${res.status}`,
-            });
-            return;
-          }
+          const analysis = await analyseCompany(companyNumber);
 
           const lastAnalysedAt = new Date().toISOString();
           await supabase
@@ -163,7 +126,6 @@ export async function POST(request: NextRequest) {
             .eq("portfolio_id", portfolioId)
             .eq("company_number", companyNumber);
 
-          const analysis = await fetchAnalysis(companyNumber);
           completed += 1;
           send({
             type: "progress",
@@ -200,7 +162,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const workers = Array.from({ length: Math.min(CONCURRENCY, companyNumbers.length) }, () => worker());
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, companyNumbers.length) },
+        () => worker()
+      );
       await Promise.all(workers);
 
       send({ type: "done", total: companyNumbers.length, completed, errors });
