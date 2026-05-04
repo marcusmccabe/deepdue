@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -43,20 +43,78 @@ export default function PortfolioClient({
   analysisByCompany,
 }: PortfolioClientProps) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
 
   const [filter, setFilter] = useState<"all" | PortfolioFlag>("all");
   const [importOpen, setImportOpen] = useState(false);
 
+  // Local state — initialised from server props, updated in place when an
+  // analyse run streams progress events back. Re-syncs from props on
+  // router.refresh() (e.g. after an import adds new rows).
+  const [companyState, setCompanyState] =
+    useState<PortfolioCompanyRow[]>(companies);
+  const [analysisState, setAnalysisState] =
+    useState<Record<string, AccountsAnalysis | null>>(analysisByCompany);
+
+  useEffect(() => {
+    setCompanyState(companies);
+  }, [companies]);
+  useEffect(() => {
+    setAnalysisState(analysisByCompany);
+  }, [analysisByCompany]);
+
   // Computed rows
   const enriched = useMemo(() => {
-    return companies.map((c) => {
-      const analysis = analysisByCompany[c.company_number] ?? null;
+    return companyState.map((c) => {
+      const analysis = analysisState[c.company_number] ?? null;
       const computed = computePortfolio(analysis);
       const lastAccountsDate = analysis?.documentDate ?? null;
       return { ...c, ...computed, lastAccountsDate, hasAnalysis: !!analysis };
     });
-  }, [companies, analysisByCompany]);
+  }, [companyState, analysisState]);
+
+  async function handleAnalyse(companyNumbers: string[]) {
+    if (!portfolioId || companyNumbers.length === 0) {
+      console.warn("[Portfolio] handleAnalyse skipped", {
+        portfolioId,
+        companyNumbers,
+      });
+      return;
+    }
+    console.log("[Portfolio] handleAnalyse start", companyNumbers);
+
+    // Optimistic — show "Analysing…" immediately on the affected rows.
+    const targets = new Set(companyNumbers);
+    setCompanyState((prev) =>
+      prev.map((c) =>
+        targets.has(c.company_number)
+          ? { ...c, analysis_status: "analysing" }
+          : c
+      )
+    );
+
+    await runBulkAnalyse({
+      portfolioId,
+      companyNumbers,
+      onRow: ({ companyNumber, status, analysis, lastAnalysedAt, error }) => {
+        console.log("[Portfolio] row event", { companyNumber, status, error });
+        setCompanyState((prev) =>
+          prev.map((c) =>
+            c.company_number === companyNumber
+              ? {
+                  ...c,
+                  analysis_status: status === "error" ? "error" : "complete",
+                  last_analysed_at: lastAnalysedAt ?? c.last_analysed_at,
+                }
+              : c
+          )
+        );
+        if (analysis) {
+          setAnalysisState((prev) => ({ ...prev, [companyNumber]: analysis }));
+        }
+      },
+    });
+    console.log("[Portfolio] handleAnalyse done");
+  }
 
   const filtered = useMemo(() => {
     if (filter === "all") return enriched;
@@ -126,14 +184,7 @@ export default function PortfolioClient({
         <>
           <StatsRow stats={stats} />
           <FilterPills value={filter} onChange={setFilter} />
-          <ClientTable
-            rows={filtered}
-            onAnalyse={(numbers) =>
-              startTransition(() => {
-                runBulkAnalyse(portfolioId!, numbers, () => router.refresh());
-              })
-            }
-          />
+          <ClientTable rows={filtered} onAnalyse={handleAnalyse} />
           <AskAIBar portfolioId={portfolioId!} />
         </>
       )}
@@ -765,12 +816,11 @@ function ImportModal({
     setStage("analysing");
     setProgress({ current: 0, total: parsed.length });
 
-    await runBulkAnalyse(
-      activePortfolioId!,
-      parsed.map((r) => r.company_number.toUpperCase()),
-      undefined,
-      (p) => setProgress(p)
-    );
+    await runBulkAnalyse({
+      portfolioId: activePortfolioId!,
+      companyNumbers: parsed.map((r) => r.company_number.toUpperCase()),
+      onProgress: (p) => setProgress(p),
+    });
 
     setStage("done");
     setTimeout(() => onImported(), 600);
@@ -1053,49 +1103,97 @@ function parseCsv(text: string): ParsedRow[] {
 }
 
 // ── Bulk analyse client helper ─────────────────────────────────────────────
-async function runBulkAnalyse(
-  portfolioId: string,
-  companyNumbers: string[],
-  onComplete?: () => void,
-  onProgress?: (p: { current: number; total: number }) => void
-) {
+type RunBulkAnalyseOptions = {
+  portfolioId: string;
+  companyNumbers: string[];
+  onRow?: (event: {
+    companyNumber: string;
+    status: "complete" | "cached" | "error";
+    analysis?: AccountsAnalysis | null;
+    lastAnalysedAt?: string;
+    error?: string;
+  }) => void;
+  onProgress?: (p: { current: number; total: number }) => void;
+};
+
+async function runBulkAnalyse(opts: RunBulkAnalyseOptions) {
+  const { portfolioId, companyNumbers, onRow, onProgress } = opts;
   if (companyNumbers.length === 0) return;
+
+  console.log("[runBulkAnalyse] POST /api/portfolio/analyse", {
+    portfolioId,
+    companyNumbers,
+  });
+
+  let res: Response;
   try {
-    const res = await fetch("/api/portfolio/analyse", {
+    res = await fetch("/api/portfolio/analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolio_id: portfolioId, company_numbers: companyNumbers }),
+      body: JSON.stringify({
+        portfolio_id: portfolioId,
+        company_numbers: companyNumbers,
+      }),
     });
-    if (!res.ok || !res.body) return;
+  } catch (err) {
+    console.error("[runBulkAnalyse] network error", err);
+    return;
+  }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let done = 0;
-    let total = companyNumbers.length;
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("[runBulkAnalyse] HTTP", res.status, text);
+    return;
+  }
+  if (!res.body) {
+    console.error("[runBulkAnalyse] no response body");
+    return;
+  }
 
-    while (true) {
-      const { done: streamDone, value } = await reader.read();
-      if (streamDone) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-          if (event.type === "start") total = event.total;
-          if (event.type === "progress") {
-            done += 1;
-            onProgress?.({ current: done, total });
-          }
-        } catch {
-          // skip
-        }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let done = 0;
+  let total = companyNumbers.length;
+
+  while (true) {
+    const { done: streamDone, value } = await reader.read();
+    if (streamDone) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let event: {
+        type?: string;
+        total?: number;
+        companyNumber?: string;
+        status?: "complete" | "cached" | "error";
+        analysis?: AccountsAnalysis | null;
+        lastAnalysedAt?: string;
+        error?: string;
+      };
+      try {
+        event = JSON.parse(line);
+      } catch (err) {
+        console.warn("[runBulkAnalyse] bad event line", line, err);
+        continue;
+      }
+      if (event.type === "start" && typeof event.total === "number") {
+        total = event.total;
+      }
+      if (event.type === "progress" && event.companyNumber && event.status) {
+        done += 1;
+        onProgress?.({ current: done, total });
+        onRow?.({
+          companyNumber: event.companyNumber,
+          status: event.status,
+          analysis: event.analysis ?? null,
+          lastAnalysedAt: event.lastAnalysedAt,
+          error: event.error,
+        });
       }
     }
-  } finally {
-    onComplete?.();
   }
 }
 

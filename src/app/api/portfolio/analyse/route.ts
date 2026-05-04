@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import type { AccountsAnalysis } from "@/lib/analysis-types";
 
 export const maxDuration = 300;
 
@@ -8,15 +9,26 @@ const CONCURRENCY = 5;
 
 type ProgressEvent =
   | { type: "start"; total: number }
-  | { type: "progress"; index: number; total: number; companyNumber: string; status: "complete" | "error" | "cached"; error?: string }
+  | {
+      type: "progress";
+      index: number;
+      total: number;
+      companyNumber: string;
+      status: "complete" | "error" | "cached";
+      error?: string;
+      analysis?: AccountsAnalysis | null;
+      lastAnalysedAt?: string;
+    }
   | { type: "done"; total: number; completed: number; errors: number };
 
 export async function POST(request: NextRequest) {
+  console.log("[api/portfolio/analyse] POST received");
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
+    console.warn("[api/portfolio/analyse] unauthorised");
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
@@ -29,6 +41,7 @@ export async function POST(request: NextRequest) {
 
   const portfolioId = body.portfolio_id;
   const companyNumbers = (body.company_numbers ?? []).map((n) => n.toUpperCase()).filter(Boolean);
+  console.log("[api/portfolio/analyse] payload", { portfolioId, count: companyNumbers.length });
 
   if (!portfolioId || companyNumbers.length === 0) {
     return new Response(JSON.stringify({ error: "Missing portfolio_id or company_numbers" }), { status: 400 });
@@ -60,6 +73,15 @@ export async function POST(request: NextRequest) {
       let errors = 0;
       let cursor = 0;
 
+      async function fetchAnalysis(companyNumber: string): Promise<AccountsAnalysis | null> {
+        const { data } = await supabase
+          .from("analysis_cache")
+          .select("analysis")
+          .eq("company_number", companyNumber)
+          .maybeSingle();
+        return (data?.analysis as AccountsAnalysis | undefined) ?? null;
+      }
+
       async function processOne(companyNumber: string, index: number) {
         try {
           const cutoff = new Date();
@@ -73,17 +95,27 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
 
           if (cached) {
+            const lastAnalysedAt = new Date().toISOString();
             await supabase
               .from("portfolio_companies")
               .update({
                 analysis_status: "complete",
-                last_analysed_at: new Date().toISOString(),
+                last_analysed_at: lastAnalysedAt,
               })
               .eq("portfolio_id", portfolioId)
               .eq("company_number", companyNumber);
 
+            const analysis = await fetchAnalysis(companyNumber);
             completed += 1;
-            send({ type: "progress", index, total: companyNumbers.length, companyNumber, status: "cached" });
+            send({
+              type: "progress",
+              index,
+              total: companyNumbers.length,
+              companyNumber,
+              status: "cached",
+              analysis,
+              lastAnalysedAt,
+            });
             return;
           }
 
@@ -119,17 +151,27 @@ export async function POST(request: NextRequest) {
             return;
           }
 
+          const lastAnalysedAt = new Date().toISOString();
           await supabase
             .from("portfolio_companies")
             .update({
               analysis_status: "complete",
-              last_analysed_at: new Date().toISOString(),
+              last_analysed_at: lastAnalysedAt,
             })
             .eq("portfolio_id", portfolioId)
             .eq("company_number", companyNumber);
 
+          const analysis = await fetchAnalysis(companyNumber);
           completed += 1;
-          send({ type: "progress", index, total: companyNumbers.length, companyNumber, status: "complete" });
+          send({
+            type: "progress",
+            index,
+            total: companyNumbers.length,
+            companyNumber,
+            status: "complete",
+            analysis,
+            lastAnalysedAt,
+          });
         } catch (err) {
           await supabase
             .from("portfolio_companies")
