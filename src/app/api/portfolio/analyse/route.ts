@@ -58,7 +58,9 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Portfolio not found" }), { status: 404 });
   }
 
-  const origin = request.nextUrl.origin;
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -127,7 +129,7 @@ export async function POST(request: NextRequest) {
 
           const cookieHeader = request.headers.get("cookie") ?? "";
           const res = await fetch(
-            `${origin}/api/analyse-accounts?companyNumber=${encodeURIComponent(companyNumber)}`,
+            `${baseUrl}/api/analyse-accounts?companyNumber=${encodeURIComponent(companyNumber)}`,
             { headers: { cookie: cookieHeader }, cache: "no-store" }
           );
 
