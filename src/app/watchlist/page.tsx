@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 const NAV_ITEMS = [
   { icon: "🔍", label: "Search", href: "/" },
   { icon: "📊", label: "Dashboard", href: "/dashboard" },
+  { icon: "📁", label: "Portfolio", href: "/portfolio" },
   { icon: "⭐", label: "Watchlist", href: "/watchlist", active: true },
   { icon: "📄", label: "Reports", href: undefined },
   { icon: "🔔", label: "Alerts", href: "/alerts" },

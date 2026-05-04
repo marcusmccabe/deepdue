@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 const NAV_ITEMS = [
   { icon: "🔍", label: "Search", active: false, href: undefined },
   { icon: "📊", label: "Dashboard", active: true, href: undefined },
+  { icon: "📁", label: "Portfolio", active: false, href: "/portfolio" },
   { icon: "⭐", label: "Watchlist", active: false, href: "/watchlist" },
   { icon: "📄", label: "Reports", active: false, href: undefined },
   { icon: "🔔", label: "Alerts", active: false, href: "/alerts" },
