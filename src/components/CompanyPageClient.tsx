@@ -1895,7 +1895,7 @@ export default function CompanyPageClient({
                 <div style={CARD_HEADER}>
                   <span style={CARD_TITLE}>Filing History</span>
                   <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
-                    Last {filings.length}
+                    Recent filings
                   </span>
                 </div>
                 {filings.length === 0 ? (
@@ -1904,60 +1904,104 @@ export default function CompanyPageClient({
                   </div>
                 ) : (
                   <div>
-                    {filings.map((filing: any, i: number) => {
-                      const docUrl = filing.transaction_id
-                        ? `https://find-and-update.company-information.service.gov.uk/company/${company.company_number}/filing-history/${filing.transaction_id}/document?format=pdf&download=0`
-                        : null;
-                      return (
-                        <div
-                          key={filing.transaction_id ?? `${filing.date}-${i}`}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            padding: "12px 18px",
-                            borderBottom: i < filings.length - 1 ? "1px solid #f1f5f9" : "none",
-                            gap: "12px",
-                          }}
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: "13px", fontWeight: "500", color: "#0f172a", marginBottom: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {fmtFilingDesc(filing.description, filing.description_values)}
+                    {(() => {
+                      // Priority: 1) most recent AA, 2) most recent CS01,
+                      // 3) significant events in last 12 months, 4) next AA
+                      const twelveMonthsAgo = new Date();
+                      twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+                      const aaFilings = filings.filter((f: any) => f.type === "AA" || f.type === "AAMD");
+                      const cs01Filings = filings.filter((f: any) => f.type === "CS01");
+                      const significantRecent = filings.filter((f: any) => {
+                        const t = f.type ?? "";
+                        const isSignificant = ["AP01", "AP02", "TM01", "TM02", "MR01", "MR04"].includes(t) || t.startsWith("PSC");
+                        return isSignificant && new Date(f.date ?? "") >= twelveMonthsAgo;
+                      });
+                      const seen = new Set<string>();
+                      const overviewFilings: any[] = [];
+                      const add = (f: any) => {
+                        const id = f.transaction_id ?? `${f.date}-${f.type}`;
+                        if (!seen.has(id) && overviewFilings.length < 4) { seen.add(id); overviewFilings.push(f); }
+                      };
+                      if (aaFilings[0]) add(aaFilings[0]);
+                      if (cs01Filings[0]) add(cs01Filings[0]);
+                      for (const f of significantRecent) add(f);
+                      if (aaFilings[1]) add(aaFilings[1]);
+                      return overviewFilings.map((filing: any, i: number) => {
+                        const docUrl = filing.transaction_id
+                          ? `https://find-and-update.company-information.service.gov.uk/company/${company.company_number}/filing-history/${filing.transaction_id}/document?format=pdf&download=0`
+                          : null;
+                        return (
+                          <div
+                            key={filing.transaction_id ?? `${filing.date}-${i}`}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                              padding: "12px 18px",
+                              borderBottom: i < overviewFilings.length - 1 ? "1px solid #f1f5f9" : "none",
+                              gap: "12px",
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: "13px", fontWeight: "500", color: "#0f172a", marginBottom: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {fmtFilingDesc(filing.description, filing.description_values)}
+                              </div>
+                              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                <span style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Courier New', monospace" }}>
+                                  {filing.type ?? "—"}
+                                </span>
+                                <span style={{ fontSize: "11px", color: "#cbd5e1" }}>·</span>
+                                <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                                  {fmtDate(filing.date)}
+                                </span>
+                              </div>
                             </div>
-                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                              <span style={{ fontSize: "11px", color: "#94a3b8", fontFamily: "'Courier New', monospace" }}>
-                                {filing.type ?? "—"}
-                              </span>
-                              <span style={{ fontSize: "11px", color: "#cbd5e1" }}>·</span>
-                              <span style={{ fontSize: "11px", color: "#94a3b8" }}>
-                                {fmtDate(filing.date)}
-                              </span>
-                            </div>
+                            {docUrl && (
+                              <a
+                                href={docUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: "500",
+                                  color: "#4f46e5",
+                                  flexShrink: 0,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                }}
+                              >
+                                View
+                                <svg width="9" height="9" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+                                  <path d="M3 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V8.5a.5.5 0 0 0-1 0V12H3V3h3.5a.5.5 0 0 0 0-1H3Zm6.854.146a.5.5 0 0 0-.707.708L11.293 5H8.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v2.793L9.854 2.146Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
+                                </svg>
+                              </a>
+                            )}
                           </div>
-                          {docUrl && (
-                            <a
-                              href={docUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                fontSize: "11px",
-                                fontWeight: "500",
-                                color: "#4f46e5",
-                                flexShrink: 0,
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "3px",
-                              }}
-                            >
-                              View
-                              <svg width="9" height="9" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-                                <path d="M3 2a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V8.5a.5.5 0 0 0-1 0V12H3V3h3.5a.5.5 0 0 0 0-1H3Zm6.854.146a.5.5 0 0 0-.707.708L11.293 5H8.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v2.793L9.854 2.146Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd" />
-                              </svg>
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
+                    <div
+                      style={{
+                        padding: "10px 18px",
+                        borderTop: "1px solid #f1f5f9",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("filings")}
+                        style={{
+                          fontSize: "13px",
+                          color: "#4f46e5",
+                          cursor: "pointer",
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                        }}
+                      >
+                        View all filings →
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1967,7 +2011,7 @@ export default function CompanyPageClient({
                 <div style={CARD_HEADER}>
                   <span style={CARD_TITLE}>Company Timeline</span>
                   <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
-                    Last 15 events
+                    Recent activity
                   </span>
                 </div>
                 {(() => {
@@ -2007,7 +2051,7 @@ export default function CompanyPageClient({
                   }
 
                   events.sort((a, b) => b.date.localeCompare(a.date));
-                  const top = events.slice(0, 15);
+                  const top = events.slice(0, 5);
 
                   if (top.length === 0) {
                     return (
@@ -2018,33 +2062,51 @@ export default function CompanyPageClient({
                   }
 
                   return (
-                    <div style={{ padding: "12px 18px" }}>
-                      {top.map((evt, i) => (
-                        <div
-                          key={`${evt.date}-${i}`}
-                          style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}
+                    <>
+                      <div style={{ padding: "12px 18px" }}>
+                        {top.map((evt, i) => (
+                          <div
+                            key={`${evt.date}-${i}`}
+                            style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}
+                          >
+                            {/* Dot + connecting line */}
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "12px", flexShrink: 0 }}>
+                              <div style={{
+                                width: "8px", height: "8px", borderRadius: "50%",
+                                backgroundColor: evt.dotColor, marginTop: "5px", flexShrink: 0,
+                              }} />
+                              {i < top.length - 1 && (
+                                <div style={{ width: "2px", flex: 1, backgroundColor: "#e2e8f0", minHeight: "24px" }} />
+                              )}
+                            </div>
+                            {/* Date */}
+                            <div style={{ width: "110px", flexShrink: 0, fontSize: "11px", color: "#94a3b8", fontWeight: "500", paddingTop: "2px" }}>
+                              {fmtDate(evt.date)}
+                            </div>
+                            {/* Description */}
+                            <div style={{ flex: 1, fontSize: "13px", color: "#0f172a", fontWeight: "500", paddingBottom: "16px", paddingTop: "1px" }}>
+                              {evt.label}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ padding: "10px 18px", borderTop: "1px solid #f1f5f9" }}>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("filings")}
+                          style={{
+                            fontSize: "13px",
+                            color: "#4f46e5",
+                            cursor: "pointer",
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                          }}
                         >
-                          {/* Dot + connecting line */}
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "12px", flexShrink: 0 }}>
-                            <div style={{
-                              width: "8px", height: "8px", borderRadius: "50%",
-                              backgroundColor: evt.dotColor, marginTop: "5px", flexShrink: 0,
-                            }} />
-                            {i < top.length - 1 && (
-                              <div style={{ width: "2px", flex: 1, backgroundColor: "#e2e8f0", minHeight: "24px" }} />
-                            )}
-                          </div>
-                          {/* Date */}
-                          <div style={{ width: "110px", flexShrink: 0, fontSize: "11px", color: "#94a3b8", fontWeight: "500", paddingTop: "2px" }}>
-                            {fmtDate(evt.date)}
-                          </div>
-                          {/* Description */}
-                          <div style={{ flex: 1, fontSize: "13px", color: "#0f172a", fontWeight: "500", paddingBottom: "16px", paddingTop: "1px" }}>
-                            {evt.label}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          View full timeline →
+                        </button>
+                      </div>
+                    </>
                   );
                 })()}
               </div>
