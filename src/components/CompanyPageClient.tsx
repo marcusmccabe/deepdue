@@ -193,219 +193,13 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Director Network Tab — rich split-panel ───────────────────────────────────
+// ── Director Network Tab — redesigned ────────────────────────────────────────
 
-function LegendItem({ color, bgColor, label }: { color: string; bgColor?: string; label: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-      <div style={{
-        width: "11px", height: "11px", borderRadius: "50%",
-        border: `2px solid ${color}`, backgroundColor: bgColor ?? "transparent", flexShrink: 0,
-      }} />
-      <span style={{ fontSize: "11px", color: "#64748b" }}>{label}</span>
-    </div>
-  );
-}
-
-function NetworkSvg({
-  companies,
-  hiddenCount,
-  currentCompanyNumber,
-  directorName,
-}: {
-  companies: any[];
-  hiddenCount: number;
-  currentCompanyNumber: string;
-  directorName: string;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [svgW, setSvgW] = useState(500);
-  const [tfm, setTfm] = useState({ x: 0, y: 0, s: 1 });
-  const panning = useRef(false);
-  const didPan = useRef(false);
-  const lastPos = useRef({ x: 0, y: 0 });
-  const [cursor, setCursor] = useState<"grab" | "grabbing">("grab");
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    setSvgW(el.clientWidth);
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w > 0) setSvgW(w);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Reset pan/zoom when selected director changes
-  useEffect(() => {
-    setTfm({ x: 0, y: 0, s: 1 });
-    setCursor("grab");
-  }, [directorName]);
-
-  // Wheel zoom — must be non-passive to call preventDefault
-  useEffect(() => {
-    const svgEl = svgRef.current;
-    if (!svgEl) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = svgEl.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      setTfm((prev: { x: number; y: number; s: number }) => {
-        const ns = Math.min(Math.max(prev.s * factor, 0.25), 5);
-        const ratio = ns / prev.s;
-        return { x: mx - ratio * (mx - prev.x), y: my - ratio * (my - prev.y), s: ns };
-      });
-    };
-    svgEl.addEventListener("wheel", onWheel, { passive: false });
-    return () => svgEl.removeEventListener("wheel", onWheel);
-  }, []);
-
-  // Pan — track mouse globally so dragging outside SVG still works
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!panning.current) return;
-      const dx = e.clientX - lastPos.current.x;
-      const dy = e.clientY - lastPos.current.y;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didPan.current = true;
-      lastPos.current = { x: e.clientX, y: e.clientY };
-      setTfm((prev: { x: number; y: number; s: number }) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-    };
-    const onUp = () => {
-      if (panning.current) { panning.current = false; setCursor("grab"); }
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, []);
-
-  const H = 420;
-  const cx = svgW / 2;
-  const cy = H / 2;
-  const CR = 26;
-  const NR = 18;
-  const RADIUS = Math.min(cx * 0.62, cy * 0.62, 145);
-  const n = companies.length;
-  const initials = getInitials(directorName);
-  const LABEL_OFF = NR + 22;
-
-  const zoomTo = (factor: number) =>
-    setTfm((prev: { x: number; y: number; s: number }) => ({ ...prev, s: Math.min(Math.max(prev.s * factor, 0.25), 5) }));
-
-  const ctrlBtn: CSSProperties = {
-    width: "26px", height: "26px", border: "1px solid #e2e8f0", borderRadius: "6px",
-    backgroundColor: "#fff", cursor: "pointer", fontSize: "16px", fontWeight: "600",
-    color: "#475569", display: "flex", alignItems: "center", justifyContent: "center",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)", lineHeight: 1, padding: 0,
-  };
-
-  return (
-    <div ref={containerRef} style={{ flex: 1, position: "relative", userSelect: "none" }}>
-      <div style={{ position: "absolute", top: 10, right: 10, zIndex: 10, display: "flex", flexDirection: "column", gap: "4px" }}>
-        <button onClick={() => zoomTo(1.25)} style={ctrlBtn} title="Zoom in">+</button>
-        <button onClick={() => zoomTo(1 / 1.25)} style={ctrlBtn} title="Zoom out">−</button>
-        <button
-          onClick={() => { setTfm({ x: 0, y: 0, s: 1 }); setCursor("grab"); }}
-          style={{ ...ctrlBtn, width: "auto", fontSize: "9px", padding: "3px 7px", letterSpacing: "0.03em" }}
-          title="Reset view"
-        >
-          Reset
-        </button>
-      </div>
-      <svg
-        ref={svgRef}
-        width={svgW}
-        height={H}
-        style={{ display: "block", cursor }}
-        onMouseDown={(e) => {
-          if (e.button !== 0) return;
-          panning.current = true;
-          didPan.current = false;
-          lastPos.current = { x: e.clientX, y: e.clientY };
-          setCursor("grabbing");
-        }}
-      >
-        <g transform={`translate(${tfm.x},${tfm.y}) scale(${tfm.s})`}>
-          {companies.map((appt, i) => {
-            const angle = (2 * Math.PI * i) / Math.max(n, 1) - Math.PI / 2;
-            const nx = cx + RADIUS * Math.cos(angle);
-            const ny = cy + RADIUS * Math.sin(angle);
-            const dx = nx - cx;
-            const dy = ny - cy;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const ax = cx + (dx / dist) * CR;
-            const ay = cy + (dy / dist) * CR;
-            const bx = nx - (dx / dist) * NR;
-            const by = ny - (dy / dist) * NR;
-
-            const status = appt.appointed_to?.company_status ?? "unknown";
-            const isCurrent = !!(appt.isCurrent || appt.appointed_to?.company_number === currentCompanyNumber);
-            const isActive = !isCurrent && status === "active";
-            const isDissolved = status === "dissolved";
-
-            const stroke = isCurrent ? "#d97706" : isActive ? "#059669" : isDissolved ? "#dc2626" : "#94a3b8";
-            const fill = isCurrent
-              ? "rgba(217,119,6,0.07)"
-              : isActive
-              ? "rgba(5,150,105,0.07)"
-              : isDissolved
-              ? "rgba(220,38,38,0.07)"
-              : "#f8fafc";
-
-            const compNum = appt.appointed_to?.company_number;
-            const rawName = appt.appointed_to?.company_name ?? "Unknown";
-            const name = toTitleCase(rawName);
-            const displayName = name.length > 25 ? name.slice(0, 24) + "…" : name;
-
-            const lx = nx + (dx / dist) * LABEL_OFF;
-            const ly = ny + (dy / dist) * LABEL_OFF;
-            // Right half → left-align right of node; left half → right-align left; top/bottom → centre
-            const isXDominant = Math.abs(dx) > Math.abs(dy) * 0.7;
-            const anchor: "start" | "middle" | "end" = isXDominant ? (dx > 0 ? "start" : "end") : "middle";
-            const baseline = isXDominant ? "middle" : (dy > 0 ? "hanging" : "auto");
-
-            return (
-              <g key={i}>
-                <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#e2e8f0" strokeWidth={1.5} />
-                <g
-                  style={{ cursor: compNum ? "pointer" : "default" }}
-                  onClick={() => {
-                    if (didPan.current) return;
-                    if (compNum) window.location.href = `/company/${compNum}`;
-                  }}
-                >
-                  <circle cx={nx} cy={ny} r={NR + 8} fill="transparent" />
-                  <circle cx={nx} cy={ny} r={NR} fill={fill} stroke={stroke} strokeWidth={2.5} />
-                  <text
-                    x={lx} y={ly}
-                    textAnchor={anchor}
-                    dominantBaseline={baseline}
-                    fontSize="11" fontWeight="500" fill="#475569"
-                    style={{ pointerEvents: "none" }}
-                  >
-                    {displayName}
-                  </text>
-                </g>
-              </g>
-            );
-          })}
-          <circle cx={cx} cy={cy} r={CR} fill="#4f46e5" />
-          <text x={cx} y={cy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="#fff" style={{ pointerEvents: "none" }}>
-            {initials}
-          </text>
-          {hiddenCount > 0 && (
-            <text x={cx} y={H - 20} textAnchor="middle" fontSize="11" fill="#94a3b8">
-              +{hiddenCount} more not shown
-            </text>
-          )}
-        </g>
-      </svg>
-    </div>
-  );
+function splitCompanyLabel(name: string): [string, string] {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 2) return [words.join(" "), ""];
+  const mid = Math.ceil(words.length / 2);
+  return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
 }
 
 function DirectorNetworkTabContent({
@@ -420,18 +214,34 @@ function DirectorNetworkTabContent({
   networkLoading: boolean;
 }) {
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [innerTab, setInnerTab] = useState<"network" | "timeline" | "list">("network");
+  const [listFilter, setListFilter] = useState<"all" | "active" | "dissolved">("all");
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [tooltipData, setTooltipData] = useState<{
+    pos: { x: number; y: number };
+    appt: any;
+    isCurrentNode: boolean;
+    isActiveNode: boolean;
+  } | null>(null);
+  const netAreaRef = useRef<HTMLDivElement>(null);
 
   if (networkLoading) {
     return (
-      <div style={{ ...CARD, height: "400px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: "13px", color: "#94a3b8" }}>Loading director network…</span>
+      <div style={{
+        padding: "28px", textAlign: "center", color: "#94a3b8", fontSize: "13px",
+        backgroundColor: "#fff", border: "0.5px solid #e2e8f0", borderRadius: "10px",
+      }}>
+        Loading director network…
       </div>
     );
   }
 
   if (officers.length === 0) {
     return (
-      <div style={{ ...CARD, padding: "28px 18px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+      <div style={{
+        padding: "28px", textAlign: "center", color: "#94a3b8", fontSize: "13px",
+        backgroundColor: "#fff", border: "0.5px solid #e2e8f0", borderRadius: "10px",
+      }}>
         No officers found
       </div>
     );
@@ -439,247 +249,633 @@ function DirectorNetworkTabContent({
 
   const clampedIdx = Math.min(selectedIdx, officers.length - 1);
   const selectedOfficer = officers[clampedIdx];
-  const allAppts = networkData[selectedOfficer.name] ?? [];
-  const activeAppts = allAppts.filter((a: any) => !a.resigned_on);
-  const otherAppts = activeAppts.filter(
+  const allAppts: any[] = networkData[selectedOfficer.name] ?? [];
+
+  const currentApptInList = allAppts.find(
+    (a: any) => a.appointed_to?.company_number === company.company_number
+  );
+
+  const currentNode: any = {
+    isCurrent: true,
+    appointed_on: currentApptInList?.appointed_on ?? selectedOfficer.appointed_on,
+    resigned_on: undefined,
+    appointed_to: {
+      company_name: company.company_name,
+      company_number: company.company_number,
+      company_status: company.company_status ?? "active",
+    },
+  };
+
+  const otherAppts = allAppts.filter(
     (a: any) => a.appointed_to?.company_number !== company.company_number
   );
-  const sortedOthers = [...otherAppts].sort((a: any, b: any) => {
-    if (a.appointed_to?.company_status === "active" && b.appointed_to?.company_status !== "active") return -1;
-    if (b.appointed_to?.company_status === "active" && a.appointed_to?.company_status !== "active") return 1;
-    return 0;
-  });
-  const svgCompanies: any[] = [
-    {
-      isCurrent: true,
-      appointed_to: {
-        company_name: company.company_name,
-        company_number: company.company_number,
-        company_status: company.company_status ?? "active",
-      },
-    },
-    ...sortedOthers.slice(0, 11),
-  ];
-  const hiddenCount = Math.max(0, sortedOthers.length - 11);
 
-  // Shared connections: other current-company officers who also appear in the selected director's network
-  const networkCompanyNums = new Set(
-    sortedOthers.map((a: any) => a.appointed_to?.company_number).filter(Boolean)
-  );
-  const sharedConnections: Array<{
-    officer: any;
-    role: string;
-    sharedCompanies: Array<{ name: string; number: string }>;
-  }> = [];
-  for (const officer of officers) {
-    if (officer.name === selectedOfficer.name) continue;
-    const appts = networkData[officer.name] ?? [];
-    const shared = appts.filter(
-      (a: any) => networkCompanyNums.has(a.appointed_to?.company_number) && !a.resigned_on
-    );
-    if (shared.length > 0) {
-      sharedConnections.push({
-        officer,
-        role: (officer.officer_role ?? "director").replace(/-/g, " "),
-        sharedCompanies: shared.map((a: any) => ({
-          name: a.appointed_to?.company_name ?? "Unknown",
-          number: a.appointed_to?.company_number ?? "",
-        })),
-      });
+  // Header pill counts
+  const activeCount = [currentNode, ...otherAppts].filter((a: any) => !a.resigned_on).length;
+  const dissolvedCount = allAppts.filter(
+    (a: any) => a.appointed_to?.company_status === "dissolved"
+  ).length;
+
+  // ─── Network tab ──────────────────────────────────────────────────────────
+  const sortedNetworkAppts = [...otherAppts].sort((a: any, b: any) => {
+    const score = (x: any): number => {
+      if (!x.resigned_on && x.appointed_to?.company_status === "active") return 0;
+      if (x.appointed_to?.company_status === "dissolved") return 2;
+      return 1;
+    };
+    return score(a) - score(b);
+  });
+  const networkNodes: any[] = [currentNode, ...sortedNetworkAppts.slice(0, 14)];
+
+  const SVG_W = 680;
+  const SVG_H = 420;
+  const SVG_CX = 340;
+  const SVG_CY = 210;
+  const NODE_R = 155;
+  const LABEL_R = 185;
+  const n = networkNodes.length;
+
+  const dotGridPts: { x: number; y: number }[] = [];
+  for (let gx = 0; gx <= SVG_W; gx += 48) {
+    for (let gy = 0; gy <= SVG_H; gy += 48) {
+      dotGridPts.push({ x: gx, y: gy });
     }
   }
 
+  // ─── Timeline tab ─────────────────────────────────────────────────────────
+  const timelineRows: any[] = [currentNode, ...otherAppts].sort((a: any, b: any) => {
+    if (a.isCurrent) return -1;
+    if (b.isCurrent) return 1;
+    const aActive = !a.resigned_on && a.appointed_to?.company_status === "active";
+    const bActive = !b.resigned_on && b.appointed_to?.company_status === "active";
+    if (aActive && !bActive) return -1;
+    if (!aActive && bActive) return 1;
+    return (a.appointed_on ?? "").localeCompare(b.appointed_on ?? "");
+  });
+
+  const currentYear = new Date().getFullYear();
+  const allStartYears = timelineRows
+    .map((a: any) => (a.appointed_on ? new Date(a.appointed_on).getFullYear() : currentYear))
+    .filter((y: number) => !isNaN(y));
+  const minYear = allStartYears.length > 0 ? Math.min(...allStartYears) : currentYear - 5;
+  const totalRange = Math.max(1, currentYear - minYear);
+
+  const yearLabels: number[] = [];
+  for (let y = minYear; y <= currentYear; y += 3) yearLabels.push(y);
+  if (yearLabels[yearLabels.length - 1] !== currentYear) yearLabels.push(currentYear);
+
+  // ─── List tab ─────────────────────────────────────────────────────────────
+  const allListRows: any[] = [currentNode, ...otherAppts].sort((a: any, b: any) => {
+    if (a.isCurrent) return -1;
+    if (b.isCurrent) return 1;
+    if (!a.resigned_on && b.resigned_on) return -1;
+    if (a.resigned_on && !b.resigned_on) return 1;
+    return (a.appointed_on ?? "").localeCompare(b.appointed_on ?? "");
+  });
+
+  const activeListCount = allListRows.filter(
+    (a: any) => !a.resigned_on && (a.isCurrent || a.appointed_to?.company_status === "active")
+  ).length;
+  const dissolvedListCount = allListRows.filter(
+    (a: any) => a.appointed_to?.company_status === "dissolved"
+  ).length;
+
+  const filteredListRows =
+    listFilter === "active"
+      ? allListRows.filter(
+          (a: any) => !a.resigned_on && (a.isCurrent || a.appointed_to?.company_status === "active")
+        )
+      : listFilter === "dissolved"
+      ? allListRows.filter((a: any) => a.appointed_to?.company_status === "dissolved")
+      : allListRows;
+
+  const netLegend = [
+    { bg: "#EEEDFE", border: "#534AB7", dotOpacity: 1, label: "Current company" },
+    { bg: "#EAF3DE", border: "#639922", dotOpacity: 1, label: "Active" },
+    { bg: "#FCEBEB", border: "#E24B4A", dotOpacity: 0.65, label: "Dissolved" },
+  ];
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {/* Split panel */}
+    <div style={{ display: "flex", flexDirection: "column" }}>
+
+      {/* ── Header bar ── */}
       <div style={{
-        display: "flex",
-        backgroundColor: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: "10px",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "10px 16px", border: "0.5px solid #e2e8f0", borderRadius: "10px",
+        backgroundColor: "#ffffff", marginBottom: "12px", gap: "12px",
       }}>
-        {/* Left 40%: director list */}
-        <div style={{ width: "40%", borderRight: "1px solid #e2e8f0", overflowY: "auto", maxHeight: "540px" }}>
-          <div style={{
-            padding: "13px 16px", borderBottom: "1px solid #e2e8f0",
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 1,
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flex: 1 }}>
+          <span style={{
+            fontSize: "13px", fontWeight: "500", color: "#0f172a",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            <span style={CARD_TITLE}>Directors &amp; Officers</span>
-            <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>
-              {officers.length} current
-            </span>
-          </div>
-          {officers.map((officer: any, i: number) => {
-            const appts = networkData[officer.name] ?? [];
-            const total = appts.filter((a: any) => !a.resigned_on).length;
-            const dissolved = appts.filter(
-              (a: any) => !a.resigned_on && a.appointed_to?.company_status === "dissolved"
-            ).length;
-            const isSelected = i === clampedIdx;
-            const name = toTitleCase(officer.name ?? "Unknown");
-            const initials = getInitials(officer.name ?? "?");
-            const role = (officer.officer_role ?? "officer").replace(/-/g, " ");
-            const countPill =
-              total < 5
-                ? { color: "#2563eb", bg: "rgba(59,130,246,0.10)", border: "rgba(59,130,246,0.25)" }
-                : total <= 15
-                ? { color: "#d97706", bg: "rgba(217,119,6,0.10)", border: "rgba(217,119,6,0.25)" }
-                : { color: "#dc2626", bg: "rgba(220,38,38,0.10)", border: "rgba(220,38,38,0.25)" };
-
-            return (
-              <div
-                key={`${officer.name}-${i}`}
-                onClick={() => setSelectedIdx(i)}
-                style={{
-                  display: "flex", alignItems: "flex-start", gap: "11px",
-                  padding: "13px 16px",
-                  borderBottom: i < officers.length - 1 ? "1px solid #f1f5f9" : "none",
-                  borderLeft: isSelected ? "3px solid #4f46e5" : "3px solid transparent",
-                  backgroundColor: isSelected ? "rgba(79,70,229,0.04)" : "transparent",
-                  cursor: "pointer", transition: "background-color 0.12s",
-                }}
-              >
-                <div style={{
-                  width: "34px", height: "34px", borderRadius: "50%",
-                  backgroundColor: "#4f46e5", color: "#fff",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "11px", fontWeight: "700", flexShrink: 0, letterSpacing: "0.02em",
-                }}>
-                  {initials}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: "13px", fontWeight: "600", color: "#0f172a", marginBottom: "2px",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    {name}
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#64748b", textTransform: "capitalize", marginBottom: "6px" }}>
-                    {role}{officer.appointed_on && <> &middot; {fmtDate(officer.appointed_on)}</>}
-                  </div>
-                  <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-                    {total > 0 && (
-                      <span style={{
-                        fontSize: "10px", fontWeight: "600", padding: "1px 7px", borderRadius: "100px",
-                        color: countPill.color, backgroundColor: countPill.bg, border: `1px solid ${countPill.border}`,
-                      }}>
-                        {total} compan{total === 1 ? "y" : "ies"}
-                      </span>
-                    )}
-                    {dissolved > 0 && (
-                      <span style={{
-                        fontSize: "10px", fontWeight: "600", padding: "1px 7px", borderRadius: "100px",
-                        color: "#dc2626", backgroundColor: "rgba(220,38,38,0.10)", border: "1px solid rgba(220,38,38,0.25)",
-                      }}>
-                        &#9888; {dissolved} dissolved
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+            {toTitleCase(selectedOfficer.name ?? "")}
+          </span>
+          <span style={{ color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>·</span>
+          <span style={{ fontSize: "13px", color: "#94a3b8", flexShrink: 0, whiteSpace: "nowrap" }}>
+            Director since{" "}
+            {selectedOfficer.appointed_on
+              ? new Date(selectedOfficer.appointed_on).getFullYear()
+              : "—"}
+          </span>
         </div>
-
-        {/* Right 60%: network diagram */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <div style={{ padding: "13px 18px", borderBottom: "1px solid #e2e8f0" }}>
-            <div style={{ fontSize: "13px", fontWeight: "700", color: "#0f172a" }}>
-              {toTitleCase(selectedOfficer.name ?? "")}
-            </div>
-            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-              {activeAppts.length} active appointment{activeAppts.length !== 1 ? "s" : ""}
-              {otherAppts.length > 0 && (
-                <> &middot; {otherAppts.length} other compan{otherAppts.length === 1 ? "y" : "ies"}</>
-              )}
-            </div>
-          </div>
-          <NetworkSvg
-            companies={svgCompanies}
-            hiddenCount={hiddenCount}
-            currentCompanyNumber={company.company_number}
-            directorName={toTitleCase(selectedOfficer.name ?? "")}
-          />
-          <div style={{ display: "flex", gap: "16px", padding: "10px 18px", borderTop: "1px solid #f1f5f9", flexWrap: "wrap" }}>
-            <LegendItem color="#059669" bgColor="rgba(5,150,105,0.07)" label="Active" />
-            <LegendItem color="#dc2626" bgColor="rgba(220,38,38,0.07)" label="Dissolved" />
-            <LegendItem color="#d97706" bgColor="rgba(217,119,6,0.07)" label="Current company" />
-            <LegendItem color="#94a3b8" bgColor="#f8fafc" label="Other status" />
-          </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          {officers.length > 1 && (
+            <select
+              value={clampedIdx}
+              onChange={(e) => setSelectedIdx(Number(e.target.value))}
+              style={{
+                fontSize: "12px", border: "1px solid #e2e8f0", borderRadius: "6px",
+                padding: "4px 8px", backgroundColor: "#ffffff", color: "#475569",
+                cursor: "pointer", outline: "none",
+              }}
+            >
+              {officers.map((o: any, i: number) => (
+                <option key={i} value={i}>{toTitleCase(o.name ?? `Officer ${i + 1}`)}</option>
+              ))}
+            </select>
+          )}
+          <span style={{
+            fontSize: "11px", fontWeight: "500", padding: "3px 9px",
+            borderRadius: "20px", backgroundColor: "#EAF3DE", color: "#3B6D11",
+          }}>
+            {activeCount} active
+          </span>
+          <span style={{
+            fontSize: "11px", fontWeight: "500", padding: "3px 9px",
+            borderRadius: "20px", backgroundColor: "#FCEBEB", color: "#A32D2D",
+          }}>
+            {dissolvedCount} dissolved
+          </span>
         </div>
       </div>
 
-      {/* Shared connections table */}
-      {sharedConnections.length > 0 && (
-        <div style={CARD}>
-          <div style={CARD_HEADER}>
-            <span style={CARD_TITLE}>Shared Connections</span>
-            <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>Layer 2 cross-reference</span>
+      {/* ── Tab bar ── */}
+      <div style={{
+        display: "flex", border: "0.5px solid #e2e8f0",
+        borderRadius: "10px 10px 0 0", overflow: "hidden", backgroundColor: "#f8fafc",
+      }}>
+        {(["network", "timeline", "list"] as const).map((tab, i, arr) => (
+          <button
+            key={tab}
+            onClick={() => setInnerTab(tab)}
+            style={{
+              flex: 1, padding: "9px 0", textAlign: "center",
+              fontSize: "12px", fontWeight: "500",
+              color: innerTab === tab ? "#4f46e5" : "#94a3b8",
+              backgroundColor: innerTab === tab ? "#ffffff" : "transparent",
+              border: "none",
+              borderRight: i < arr.length - 1 ? "0.5px solid #e2e8f0" : "none",
+              cursor: "pointer",
+            }}
+          >
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab content ── */}
+      <div style={{
+        border: "0.5px solid #e2e8f0", borderTop: "none",
+        borderRadius: "0 0 10px 10px", backgroundColor: "#ffffff", overflow: "hidden",
+      }}>
+
+        {/* Network tab */}
+        {innerTab === "network" && (
+          <>
+            <div
+              ref={netAreaRef}
+              style={{ position: "relative", backgroundColor: "#f8fafc", height: "420px" }}
+            >
+              <svg
+                viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+                width="100%"
+                height="100%"
+                style={{ display: "block" }}
+              >
+                {/* Background dot grid */}
+                {dotGridPts.map((pt, di) => (
+                  <circle key={`dot-${di}`} cx={pt.x} cy={pt.y} r={1}
+                    fill="var(--color-border-tertiary)" opacity={0.6} />
+                ))}
+
+                {/* Connecting lines — drawn before nodes */}
+                {networkNodes.map((appt: any, i: number) => {
+                  const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1);
+                  const nx = SVG_CX + NODE_R * Math.cos(angle);
+                  const ny = SVG_CY + NODE_R * Math.sin(angle);
+                  const isCur = !!(appt.isCurrent);
+                  const isAct = !isCur && !appt.resigned_on && appt.appointed_to?.company_status === "active";
+                  const isDis = appt.appointed_to?.company_status === "dissolved";
+                  const stroke = isCur ? "#7F77DD" : isAct ? "#97C459" : "#E24B4A";
+                  const sw = isCur || isAct ? 1.2 : 1;
+                  const opacity = isCur ? 0.7 : isAct ? 0.5 : 0.25;
+                  const isDimmed = hoveredIdx !== null && hoveredIdx !== i;
+                  return (
+                    <line
+                      key={`ln-${i}`}
+                      x1={SVG_CX} y1={SVG_CY} x2={nx} y2={ny}
+                      stroke={stroke} strokeWidth={sw}
+                      strokeDasharray={isDis && !isCur ? "5,4" : undefined}
+                      opacity={isDimmed ? 0.08 : opacity}
+                      style={{ transition: "opacity 0.2s" }}
+                    />
+                  );
+                })}
+
+                {/* Company nodes + labels */}
+                {networkNodes.map((appt: any, i: number) => {
+                  const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1);
+                  const nx = SVG_CX + NODE_R * Math.cos(angle);
+                  const ny = SVG_CY + NODE_R * Math.sin(angle);
+                  const lx = SVG_CX + LABEL_R * Math.cos(angle);
+                  const ly = SVG_CY + LABEL_R * Math.sin(angle);
+
+                  const isCur = !!(appt.isCurrent);
+                  const isAct = !isCur && !appt.resigned_on && appt.appointed_to?.company_status === "active";
+                  const isDis = appt.appointed_to?.company_status === "dissolved";
+
+                  const r = isCur ? 22 : isAct ? 18 : 17;
+                  const fill = isCur ? "#EEEDFE" : isAct ? "#EAF3DE" : "#FCEBEB";
+                  const stroke = isCur ? "#534AB7" : isAct ? "#639922" : "#E24B4A";
+                  const sw = isCur ? 2.5 : 1.5;
+                  const nodeOpacity = isDis && !isCur ? 0.55 : 1;
+                  const isDimmed = hoveredIdx !== null && hoveredIdx !== i;
+
+                  const deg = angle * 180 / Math.PI;
+                  let anchor: "start" | "middle" | "end";
+                  let ly1: number, ly2: number;
+                  if (deg >= -135 && deg < -45) {
+                    anchor = "middle"; ly1 = ly - 12; ly2 = ly;
+                  } else if (deg >= -45 && deg < 45) {
+                    anchor = "start"; ly1 = ly - 6; ly2 = ly + 6;
+                  } else if (deg >= 45 && deg < 135) {
+                    anchor = "middle"; ly1 = ly + 2; ly2 = ly + 14;
+                  } else {
+                    anchor = "end"; ly1 = ly - 6; ly2 = ly + 6;
+                  }
+
+                  const labelColor = isDis && !isCur ? "#94a3b8" : "#0f172a";
+                  const labelWeight = isDis && !isCur ? 400 : 500;
+                  const [line1, line2] = splitCompanyLabel(
+                    toTitleCase(appt.appointed_to?.company_name ?? "Unknown")
+                  );
+                  const compNum = appt.appointed_to?.company_number;
+
+                  return (
+                    <g
+                      key={`nd-${i}`}
+                      style={{
+                        cursor: compNum ? "pointer" : "default",
+                        opacity: isDimmed ? 0.2 : 1,
+                        transition: "opacity 0.2s",
+                      }}
+                      onMouseEnter={(e) => {
+                        const rect = (e.currentTarget as SVGGElement).getBoundingClientRect();
+                        const cRect = netAreaRef.current?.getBoundingClientRect();
+                        if (cRect) {
+                          setTooltipData({
+                            pos: {
+                              x: rect.left - cRect.left + rect.width / 2,
+                              y: rect.top - cRect.top,
+                            },
+                            appt,
+                            isCurrentNode: isCur,
+                            isActiveNode: isAct,
+                          });
+                        }
+                        setHoveredIdx(i);
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredIdx(null);
+                        setTooltipData(null);
+                      }}
+                      onClick={() => {
+                        if (compNum) window.location.href = `/company/${compNum}`;
+                      }}
+                    >
+                      <circle cx={nx} cy={ny} r={r + 8} fill="transparent" />
+                      {isCur && (
+                        <circle cx={nx} cy={ny} r={29}
+                          fill="none" stroke="#534AB7" strokeWidth={1}
+                          strokeDasharray="3,3" opacity={0.4} />
+                      )}
+                      <circle
+                        cx={nx} cy={ny} r={r}
+                        fill={fill} stroke={stroke} strokeWidth={sw} opacity={nodeOpacity}
+                      />
+                      <text
+                        textAnchor={anchor}
+                        fontSize={10} fontWeight={labelWeight} fill={labelColor}
+                        style={{ pointerEvents: "none" }}
+                      >
+                        <tspan x={lx} y={ly1}>{line1}</tspan>
+                        {line2 && <tspan x={lx} y={ly2}>{line2}</tspan>}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* Director node — rendered last, on top */}
+                <circle cx={SVG_CX} cy={SVG_CY} r={30}
+                  fill="#4f46e5" stroke="#3730a3" strokeWidth={2.5} />
+                <text
+                  x={SVG_CX} y={SVG_CY + 5}
+                  textAnchor="middle" fontSize={13} fontWeight={500} fill="#ffffff"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {getInitials(selectedOfficer.name ?? "")}
+                </text>
+              </svg>
+
+              {/* Tooltip */}
+              {tooltipData && (() => {
+                const cW = netAreaRef.current?.clientWidth ?? 680;
+                const tx = Math.min(tooltipData.pos.x + 12, cW - 190);
+                const ty = Math.max(tooltipData.pos.y - 80, 8);
+                const rawStatus = tooltipData.appt.appointed_to?.company_status ?? "unknown";
+                const statusLabel = tooltipData.isCurrentNode
+                  ? "Current"
+                  : rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+                const statusColor = tooltipData.isCurrentNode ? "#534AB7"
+                  : tooltipData.isActiveNode ? "#3B6D11" : "#A32D2D";
+                return (
+                  <div style={{
+                    position: "absolute", left: tx, top: ty,
+                    backgroundColor: "#ffffff", border: "0.5px solid #e2e8f0",
+                    borderRadius: "8px", padding: "10px 12px",
+                    minWidth: "175px", zIndex: 10, pointerEvents: "none",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+                  }}>
+                    <div style={{ fontSize: "12px", fontWeight: "500", color: "#0f172a", marginBottom: "4px" }}>
+                      {toTitleCase(tooltipData.appt.appointed_to?.company_name ?? "Unknown")}
+                    </div>
+                    <div style={{ fontSize: "11px", fontWeight: "500", color: statusColor, marginBottom: "2px" }}>
+                      {statusLabel}
+                    </div>
+                    {tooltipData.appt.appointed_on && (
+                      <div style={{ fontSize: "11px", color: "#64748b" }}>
+                        Appointed {new Date(tooltipData.appt.appointed_on).getFullYear()}
+                      </div>
+                    )}
+                    {tooltipData.appt.resigned_on && (
+                      <div style={{ fontSize: "11px", color: "#64748b" }}>
+                        Resigned {new Date(tooltipData.appt.resigned_on).getFullYear()}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Network legend */}
+            <div style={{
+              display: "flex", gap: "16px", padding: "10px 16px",
+              borderTop: "0.5px solid #e2e8f0", flexWrap: "wrap",
+            }}>
+              {netLegend.map(({ bg, border, dotOpacity, label }) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <div style={{
+                    width: "11px", height: "11px", borderRadius: "50%",
+                    backgroundColor: bg, border: `2px solid ${border}`,
+                    flexShrink: 0, opacity: dotOpacity,
+                  }} />
+                  <span style={{ fontSize: "11px", color: "#64748b" }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Timeline tab */}
+        {innerTab === "timeline" && (
+          <div>
+            {/* Year axis */}
+            <div style={{
+              display: "flex", position: "sticky", top: 0, zIndex: 1,
+              backgroundColor: "#ffffff", borderBottom: "0.5px solid #e2e8f0",
+            }}>
+              <div style={{ width: "182px", flexShrink: 0 }} />
+              <div style={{ flex: 1, position: "relative", height: "28px" }}>
+                {yearLabels.map((yr) => (
+                  <span key={yr} style={{
+                    position: "absolute",
+                    left: `${((yr - minYear) / totalRange) * 100}%`,
+                    fontSize: "10px", color: "#94a3b8", fontWeight: "500",
+                    transform: "translateX(-50%)", top: "8px", whiteSpace: "nowrap",
+                  }}>
+                    {yr}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Rows */}
+            {timelineRows.map((appt: any, i: number) => {
+              const isCurComp = !!(appt.isCurrent);
+              const compNum = appt.appointed_to?.company_number;
+              const compName = toTitleCase(appt.appointed_to?.company_name ?? "Unknown");
+              const startYear = appt.appointed_on
+                ? new Date(appt.appointed_on).getFullYear() : minYear;
+              const endYear = appt.resigned_on
+                ? new Date(appt.resigned_on).getFullYear() : currentYear;
+              const barLeft = ((startYear - minYear) / totalRange) * 100;
+              const barWidth = Math.max(0.5, ((endYear - startYear) / totalRange) * 100);
+              const isAct = !appt.resigned_on && appt.appointed_to?.company_status === "active";
+              const barColor = isCurComp ? "#534AB7" : isAct ? "#639922" : "#E24B4A";
+              const barOpacity = isCurComp ? 1 : isAct ? 0.9 : 0.7;
+
+              return (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center",
+                  borderBottom: i < timelineRows.length - 1 ? "0.5px solid #f1f5f9" : "none",
+                  padding: "5px 0",
+                }}>
+                  <div style={{
+                    width: "182px", flexShrink: 0,
+                    padding: "0 12px 0 16px", textAlign: "right",
+                  }}>
+                    <div
+                      style={{
+                        fontSize: "11px", fontWeight: "500", color: "#0f172a",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        cursor: compNum ? "pointer" : "default",
+                      }}
+                      onClick={() => { if (compNum) window.location.href = `/company/${compNum}`; }}
+                    >
+                      {compName}
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#94a3b8" }}>
+                      {appt.appointed_on ? new Date(appt.appointed_on).getFullYear() : "—"}
+                      {appt.resigned_on
+                        ? ` – ${new Date(appt.resigned_on).getFullYear()}` : " – now"}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, position: "relative", height: "10px", paddingRight: "16px" }}>
+                    <div style={{
+                      position: "absolute",
+                      left: `${barLeft}%`, width: `${barWidth}%`,
+                      height: "10px", borderRadius: "5px",
+                      backgroundColor: barColor, opacity: barOpacity,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Timeline legend */}
+            <div style={{
+              display: "flex", gap: "16px", padding: "10px 16px",
+              borderTop: "0.5px solid #e2e8f0", flexWrap: "wrap",
+            }}>
+              {[
+                { bg: "#534AB7", op: 1, label: "Current company" },
+                { bg: "#639922", op: 0.9, label: "Active" },
+                { bg: "#E24B4A", op: 0.7, label: "Dissolved" },
+              ].map(({ bg, op, label }) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <div style={{
+                    width: "11px", height: "11px", borderRadius: "50%",
+                    backgroundColor: bg, flexShrink: 0, opacity: op,
+                  }} />
+                  <span style={{ fontSize: "11px", color: "#64748b" }}>{label}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ backgroundColor: "#f8fafc" }}>
-                {["Director", "Shared Between", "Role"].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: "10px 18px", textAlign: "left",
+        )}
+
+        {/* List tab */}
+        {innerTab === "list" && (
+          <div>
+            {/* Filter bar */}
+            <div style={{
+              display: "flex", gap: "6px", padding: "10px 16px",
+              backgroundColor: "#f8fafc", borderBottom: "0.5px solid #e2e8f0", flexWrap: "wrap",
+            }}>
+              {([
+                { key: "all" as const, label: `All (${allListRows.length})` },
+                { key: "active" as const, label: `Active (${activeListCount})` },
+                { key: "dissolved" as const, label: `Dissolved (${dissolvedListCount})` },
+              ]).map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setListFilter(key)}
+                  style={{
+                    fontSize: "11px", fontWeight: "500",
+                    padding: "4px 10px", borderRadius: "20px", cursor: "pointer",
+                    border: listFilter === key ? "1px solid #534AB7" : "1px solid #e2e8f0",
+                    backgroundColor: listFilter === key ? "#EEEDFE" : "#ffffff",
+                    color: listFilter === key ? "#3C3489" : "#94a3b8",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Table */}
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["Company", "Role", "Appointed", "Resigned", "Status"].map((h) => (
+                    <th key={h} style={{
+                      padding: "10px 12px 10px 16px", textAlign: "left",
                       fontSize: "10px", fontWeight: "600", color: "#94a3b8",
                       textTransform: "uppercase", letterSpacing: "0.07em",
-                      borderBottom: "1px solid #e2e8f0",
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sharedConnections.map(({ officer, role, sharedCompanies }, i) => (
-                <tr key={i} style={{ borderBottom: i < sharedConnections.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-                  <td style={{ padding: "12px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{
-                        width: "28px", height: "28px", borderRadius: "50%",
-                        backgroundColor: "#4f46e5", color: "#fff",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "10px", fontWeight: "700", flexShrink: 0,
-                      }}>
-                        {getInitials(officer.name ?? "?")}
-                      </div>
-                      <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
-                        {toTitleCase(officer.name ?? "")}
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ padding: "12px 18px" }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
-                      {sharedCompanies.map(({ name, number }, j) => (
-                        <a
-                          key={j}
-                          href={`/company/${number}`}
-                          style={{
-                            fontSize: "12px", color: "#4f46e5", fontWeight: "500",
-                            textDecoration: "none", padding: "2px 8px", borderRadius: "6px",
-                            backgroundColor: "rgba(79,70,229,0.06)", border: "1px solid rgba(79,70,229,0.15)",
-                          }}
-                        >
-                          {toTitleCase(name)}
-                        </a>
-                      ))}
-                    </div>
-                  </td>
-                  <td style={{ padding: "12px 18px", fontSize: "12px", color: "#64748b", textTransform: "capitalize" }}>
-                    {role}
-                  </td>
+                      borderBottom: "1px solid #e2e8f0", backgroundColor: "#f8fafc",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {filteredListRows.map((appt: any, i: number) => {
+                  const isCurComp = !!(appt.isCurrent);
+                  const compNum = appt.appointed_to?.company_number;
+                  const compName = toTitleCase(appt.appointed_to?.company_name ?? "Unknown");
+                  const statusVal = isCurComp
+                    ? "current"
+                    : (appt.appointed_to?.company_status ?? "unknown");
+                  const role = (isCurComp
+                    ? (selectedOfficer.officer_role ?? "director")
+                    : "director"
+                  ).replace(/-/g, " ");
+
+                  let dotColor: string, pillBg: string, pillColor: string, pillLabel: string;
+                  if (statusVal === "current") {
+                    dotColor = "#534AB7"; pillBg = "#EEEDFE"; pillColor = "#3C3489"; pillLabel = "Current";
+                  } else if (statusVal === "active") {
+                    dotColor = "#3B6D11"; pillBg = "#EAF3DE"; pillColor = "#3B6D11"; pillLabel = "Active";
+                  } else if (statusVal === "dissolved") {
+                    dotColor = "#A32D2D"; pillBg = "#FCEBEB"; pillColor = "#A32D2D"; pillLabel = "Dissolved";
+                  } else {
+                    dotColor = "#94a3b8"; pillBg = "#f1f5f9"; pillColor = "#64748b";
+                    pillLabel = statusVal.charAt(0).toUpperCase() + statusVal.slice(1);
+                  }
+
+                  return (
+                    <tr
+                      key={i}
+                      style={{ borderBottom: "0.5px solid #e2e8f0" }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "#f8fafc";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLTableRowElement).style.backgroundColor = "";
+                      }}
+                    >
+                      <td style={{ padding: "10px 12px 10px 16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{
+                            width: "7px", height: "7px", borderRadius: "50%",
+                            backgroundColor: dotColor, flexShrink: 0,
+                          }} />
+                          {compNum ? (
+                            <a href={`/company/${compNum}`} style={{
+                              fontSize: "12px", fontWeight: "500", color: "#4f46e5",
+                              textDecoration: "none",
+                            }}>
+                              {compName}
+                            </a>
+                          ) : (
+                            <span style={{ fontSize: "12px", fontWeight: "500", color: "#0f172a" }}>
+                              {compName}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{
+                        padding: "10px 12px", fontSize: "12px",
+                        color: "#0f172a", textTransform: "capitalize",
+                      }}>
+                        {role}
+                      </td>
+                      <td style={{ padding: "10px 12px", fontSize: "11px", color: "#94a3b8" }}>
+                        {appt.appointed_on ? fmtDate(appt.appointed_on) : "—"}
+                      </td>
+                      <td style={{ padding: "10px 12px", fontSize: "11px", color: "#94a3b8" }}>
+                        {appt.resigned_on ? fmtDate(appt.resigned_on) : "—"}
+                      </td>
+                      <td style={{ padding: "10px 12px" }}>
+                        <span style={{
+                          fontSize: "11px", fontWeight: "500",
+                          padding: "3px 8px", borderRadius: "20px",
+                          backgroundColor: pillBg, color: pillColor,
+                        }}>
+                          {pillLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
