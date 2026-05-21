@@ -98,7 +98,32 @@ Respond in the following JSON structure only, with no additional text or markdow
     "keyConcerns": ["Array of specific financial or operational concerns"]
   },
 
-  "redFlags": ["Array of specific red flags only — each must be a concrete, evidenced observation. Examples: 'Accounts filed 4 months late', 'Auditor has raised going concern doubt', 'Net liabilities position of £Xm', 'Revenue declined 23% year on year'. Do not include generic risks. If there are no material red flags, return an empty array."]
+  "redFlags": ["Array of specific red flags only — each must be a concrete, evidenced observation. Examples: 'Accounts filed 4 months late', 'Auditor has raised going concern doubt', 'Net liabilities position of £Xm', 'Revenue declined 23% year on year'. Do not include generic risks. If there are no material red flags, return an empty array."],
+
+  "financialHealth": {
+    "revenue": {
+      "value": "current year total revenue/turnover as a plain integer with no £ sign, commas, or suffix (e.g. 235215041). Use 0 if genuinely not present in the accounts.",
+      "prior": "prior year total revenue/turnover as a plain integer. Use 0 if not present.",
+      "yoyChange": "percentage change as a string (e.g. \"-7.7%\" or \"+12.3%\"). Use \"n/a\" if cannot be calculated."
+    },
+    "netProfit": {
+      "value": "current year net profit (profit after tax) as a plain integer. Use negative integers for losses (e.g. -450000). Use 0 if not present.",
+      "prior": "prior year net profit as a plain integer. Use 0 if not present.",
+      "yoyChange": "percentage change as a string. Use \"n/a\" if cannot be calculated."
+    },
+    "operatingProfit": {
+      "value": "current year operating profit as a plain integer. Use negative for losses. Use 0 if not present.",
+      "prior": "prior year operating profit as a plain integer. Use 0 if not present.",
+      "yoyChange": "percentage change as a string. Use \"n/a\" if cannot be calculated."
+    }
+  },
+
+  "signals": {
+    "creditRisk": "one of: Low | Medium | High — must be consistent with creditAssessment.overallRating",
+    "cashHealth": "one of: Good | Adequate | Weak — Good if strong liquidity and cash generation, Weak if liquidity concerns or cash outflows raised, Adequate otherwise",
+    "directorRisk": "one of: Low | Medium | High — High if single director or recent director resignations noted, Medium if small stable board, Low if strong governance structures disclosed",
+    "auditOpinion": "one of: Clean | Qualified | Going concern — Clean if unqualified opinion with no going concern issues, Going concern if going concern language present, Qualified otherwise"
+  }
 }`;
 
 // ── Startup env-var check ─────────────────────────────────────────────────────
@@ -533,17 +558,35 @@ export async function GET(request: NextRequest) {
         : undefined,
       redFlags: strArray(parsed.redFlags),
 
-      // ── Legacy fields (preserved for backwards compatibility) ────────
+      // ── Structured financial data ─────────────────────────────────────
       financialHealth: {
         revenue: {
-          value: parsed.financialHealth?.revenue?.value ?? null,
+          value: typeof parsed.financialHealth?.revenue?.value === "number"
+            ? parsed.financialHealth.revenue.value
+            : (parseInt(String(parsed.financialHealth?.revenue?.value ?? ""), 10) || 0),
+          prior: typeof parsed.financialHealth?.revenue?.prior === "number"
+            ? parsed.financialHealth.revenue.prior
+            : (parseInt(String(parsed.financialHealth?.revenue?.prior ?? ""), 10) || 0),
           yoyChange: parsed.financialHealth?.revenue?.yoyChange ?? "n/a",
         },
-        grossProfit: lineItem(parsed.financialHealth?.grossProfit),
-        operatingProfit: lineItem(parsed.financialHealth?.operatingProfit),
-        netProfit: lineItem(parsed.financialHealth?.netProfit),
-        cashPosition: parsed.financialHealth?.cashPosition ?? "n/a",
-        netAssets: parsed.financialHealth?.netAssets ?? "n/a",
+        netProfit: {
+          value: typeof parsed.financialHealth?.netProfit?.value === "number"
+            ? parsed.financialHealth.netProfit.value
+            : (parseInt(String(parsed.financialHealth?.netProfit?.value ?? ""), 10) || 0),
+          prior: typeof parsed.financialHealth?.netProfit?.prior === "number"
+            ? parsed.financialHealth.netProfit.prior
+            : (parseInt(String(parsed.financialHealth?.netProfit?.prior ?? ""), 10) || 0),
+          yoyChange: parsed.financialHealth?.netProfit?.yoyChange ?? "n/a",
+        },
+        operatingProfit: {
+          value: typeof parsed.financialHealth?.operatingProfit?.value === "number"
+            ? parsed.financialHealth.operatingProfit.value
+            : (parseInt(String(parsed.financialHealth?.operatingProfit?.value ?? ""), 10) || 0),
+          prior: typeof parsed.financialHealth?.operatingProfit?.prior === "number"
+            ? parsed.financialHealth.operatingProfit.prior
+            : (parseInt(String(parsed.financialHealth?.operatingProfit?.prior ?? ""), 10) || 0),
+          yoyChange: parsed.financialHealth?.operatingProfit?.yoyChange ?? "n/a",
+        },
       },
       margins: {
         grossMargin: parsed.margins?.grossMargin ?? "n/a",
@@ -611,6 +654,48 @@ export async function GET(request: NextRequest) {
         chargesRegistered:
           parsed.complianceSignals?.chargesRegistered ?? "None registered",
       },
+      signals: (() => {
+        const validCreditRisk = (v: unknown): v is "Low" | "Medium" | "High" =>
+          v === "Low" || v === "Medium" || v === "High";
+        const validCashHealth = (v: unknown): v is "Good" | "Adequate" | "Weak" =>
+          v === "Good" || v === "Adequate" || v === "Weak";
+        const validAuditOpinion = (v: unknown): v is "Clean" | "Qualified" | "Going concern" =>
+          v === "Clean" || v === "Qualified" || v === "Going concern";
+
+        // Derive creditRisk from creditAssessment.overallRating if signals not set
+        const rawRating: string = (parsed.creditAssessment?.overallRating ?? "").toLowerCase();
+        const derivedCreditRisk: "Low" | "Medium" | "High" =
+          rawRating.includes("low") ? "Low" : rawRating.includes("high") ? "High" : "Medium";
+
+        // Derive auditOpinion from auditorAndGoingConcern if signals not set
+        const rawAudit: string = (
+          parsed.auditorAndGoingConcern?.auditOpinion ??
+          parsed.auditOpinion?.opinion ?? ""
+        ).toLowerCase();
+        const derivedAudit: "Clean" | "Qualified" | "Going concern" =
+          rawAudit.includes("going concern")
+            ? "Going concern"
+            : rawAudit === "clean" || rawAudit.includes("unqualified")
+            ? "Clean"
+            : rawAudit.length > 0 && rawAudit !== "clean"
+            ? "Qualified"
+            : "Clean";
+
+        return {
+          creditRisk: validCreditRisk(parsed.signals?.creditRisk)
+            ? parsed.signals.creditRisk
+            : derivedCreditRisk,
+          cashHealth: validCashHealth(parsed.signals?.cashHealth)
+            ? parsed.signals.cashHealth
+            : "Adequate",
+          directorRisk: validCreditRisk(parsed.signals?.directorRisk)
+            ? parsed.signals.directorRisk
+            : "Medium",
+          auditOpinion: validAuditOpinion(parsed.signals?.auditOpinion)
+            ? parsed.signals.auditOpinion
+            : derivedAudit,
+        };
+      })(),
       analysedAt: new Date().toISOString(),
       companyNumber,
       documentDate: filing.date,
