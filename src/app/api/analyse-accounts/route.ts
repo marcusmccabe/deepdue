@@ -5,8 +5,7 @@ import { analyseWithGemini } from "@/lib/gemini-analysis";
 import { analyseWithMistral } from "@/lib/mistral-analysis";
 import { analyseWithDocAI } from "@/lib/docai-analysis";
 
-// Allow up to 60 s for the full pipeline (Vercel Pro; free tier caps at 10 s)
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const CH_BASE = "https://api.company-information.service.gov.uk";
 const CH_DOC_BASE = "https://document-api.company-information.service.gov.uk";

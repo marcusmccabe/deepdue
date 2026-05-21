@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { AccountsAnalysis } from "@/lib/analysis-types";
 import type { FinancialSnapshot, FinancialYear } from "@/lib/financial-snapshot-types";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const CH_BASE = "https://api.company-information.service.gov.uk";
