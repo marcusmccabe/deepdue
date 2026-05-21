@@ -9,13 +9,23 @@ export interface FinancialLineItem {
   yoyChange: string;
 }
 
+export interface FinancialLineItemNumeric {
+  value: number;
+  prior: number;
+  yoyChange: string;
+}
+
 export interface FinancialHealth {
-  revenue: FinancialLineItem;
-  grossProfit: FinancialLineItem;
-  operatingProfit: FinancialLineItem;
-  netProfit: FinancialLineItem;
-  cashPosition: string;
-  netAssets: string;
+  revenue: FinancialLineItemNumeric;
+  netProfit: FinancialLineItemNumeric;
+  operatingProfit: FinancialLineItemNumeric;
+}
+
+export interface SignalScores {
+  creditRisk: "Low" | "Medium" | "High";
+  cashHealth: "Good" | "Adequate" | "Weak";
+  directorRisk: "Low" | "Medium" | "High";
+  auditOpinion: "Clean" | "Qualified" | "Going concern";
 }
 
 export interface Margins {
@@ -125,6 +135,9 @@ export interface AccountsAnalysis {
     keyConcerns: string[];
   };
   redFlags?: string[];
+
+  // ── Signal scores — always populated ────────────────────────────────────
+  signals?: SignalScores;
 
   // ── Legacy fields (still produced by the existing parser & cache) ───────
   // Typed as `any` so the legacy rendering path keeps compiling without
