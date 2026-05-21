@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { icon: "📊", label: "Dashboard", active: true, href: undefined },
   { icon: "📁", label: "Portfolio", active: false, href: "/portfolio" },
   { icon: "⭐", label: "Watchlist", active: false, href: "/watchlist" },
+  { icon: "⚖️", label: "Compare", active: false, href: "/compare" },
   { icon: "📄", label: "Reports", active: false, href: undefined },
   { icon: "🔔", label: "Alerts", active: false, href: "/alerts" },
   { icon: "💳", label: "Pricing", active: false, href: "/pricing" },

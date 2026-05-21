@@ -1706,6 +1706,18 @@ export default function CompanyPageClient({
                       : watchlistState === "error" ? "Error — retry"
                       : "+ Watchlist"}
                   </button>
+                  <a
+                    href={`/compare?c=${encodeURIComponent(company.company_number)}`}
+                    style={{
+                      padding: "8px 14px", borderRadius: "8px",
+                      border: "1px solid #e2e8f0", backgroundColor: "#ffffff",
+                      color: "#475569", fontSize: "13px", fontWeight: "500",
+                      cursor: "pointer", textDecoration: "none",
+                      display: "inline-flex", alignItems: "center", gap: "6px",
+                    }}
+                  >
+                    ⚖️ Compare
+                  </a>
                   <button style={{
                     padding: "8px 14px", borderRadius: "8px",
                     border: "1px solid #e2e8f0", backgroundColor: "#ffffff",
