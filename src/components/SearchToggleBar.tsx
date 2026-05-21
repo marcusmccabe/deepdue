@@ -44,10 +44,24 @@ export default function SearchToggleBar() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [noResults, setNoResults] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [limitNote, setLimitNote] = useState("");
 
   const containerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
+
+  function toggleSelected(num: string) {
+    setSelected((prev) => {
+      if (prev.includes(num)) return prev.filter((p) => p !== num);
+      if (prev.length >= 5) {
+        setLimitNote("Maximum 5 companies");
+        setTimeout(() => setLimitNote(""), 2000);
+        return prev;
+      }
+      return [...prev, num];
+    });
+  }
 
   const doSearch = useCallback(async (q: string) => {
     if (q.length < 3) {
@@ -244,8 +258,11 @@ export default function SearchToggleBar() {
                 <div
                   key={r.company_number}
                   role="option"
-                  aria-selected="false"
-                  onClick={() => handleSelect(r.company_number)}
+                  aria-selected={selected.includes(r.company_number)}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).dataset.role === "checkbox") return;
+                    handleSelect(r.company_number);
+                  }}
                   onMouseEnter={(e) => {
                     (e.currentTarget as HTMLDivElement).style.backgroundColor =
                       "#f8fafc";
@@ -267,8 +284,25 @@ export default function SearchToggleBar() {
                       display: "flex",
                       alignItems: "center",
                       marginBottom: "2px",
+                      gap: "8px",
                     }}
                   >
+                    <input
+                      type="checkbox"
+                      data-role="checkbox"
+                      checked={selected.includes(r.company_number)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggleSelected(r.company_number);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        cursor: "pointer",
+                        accentColor: "#4f46e5",
+                        flexShrink: 0,
+                      }}
+                      aria-label={`Select ${r.title} to compare`}
+                    />
                     <span
                       style={{
                         fontSize: "14px",
@@ -321,6 +355,70 @@ export default function SearchToggleBar() {
                 }}
               >
                 No companies found for &ldquo;{query}&rdquo;
+              </div>
+            )}
+
+            {(selected.length >= 2 || limitNote) && (
+              <div
+                style={{
+                  position: "sticky",
+                  bottom: 0,
+                  borderTop: "1px solid #e2e8f0",
+                  backgroundColor: "#ffffff",
+                  padding: "10px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                }}
+              >
+                <span style={{ fontSize: "12px", color: "#475569" }}>
+                  {selected.length} selected
+                  {limitNote && (
+                    <span style={{ color: "#94a3b8", marginLeft: "8px" }}>
+                      · {limitNote}
+                    </span>
+                  )}
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelected([]);
+                    }}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                      color: "#94a3b8",
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (selected.length >= 2) {
+                        router.push(`/compare?c=${selected.join(",")}`);
+                      }
+                    }}
+                    disabled={selected.length < 2}
+                    style={{
+                      padding: "6px 14px",
+                      backgroundColor: "#4f46e5",
+                      color: "#ffffff",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      cursor: selected.length >= 2 ? "pointer" : "default",
+                      opacity: selected.length >= 2 ? 1 : 0.5,
+                    }}
+                  >
+                    Compare →
+                  </button>
+                </div>
               </div>
             )}
           </div>

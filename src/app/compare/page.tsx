@@ -1,36 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
 import { UserMenu } from "@/components/UserMenu";
-import { redirect } from "next/navigation";
-import { AlertsList } from "./AlertsList";
+import CompareClient from "@/components/CompareClient";
 
 const NAV_ITEMS = [
   { icon: "🔍", label: "Search", href: "/" },
   { icon: "📊", label: "Dashboard", href: "/dashboard" },
   { icon: "📁", label: "Portfolio", href: "/portfolio" },
   { icon: "⭐", label: "Watchlist", href: "/watchlist" },
-  { icon: "⚖️", label: "Compare", href: "/compare" },
+  { icon: "⚖️", label: "Compare", href: "/compare", active: true },
   { icon: "📄", label: "Reports", href: undefined },
-  { icon: "🔔", label: "Alerts", href: "/alerts", active: true },
+  { icon: "🔔", label: "Alerts", href: "/alerts" },
   { icon: "💳", label: "Pricing", href: "/pricing" },
   { icon: "⚙️", label: "Settings", href: undefined },
 ];
 
-export default async function AlertsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+interface PageProps {
+  searchParams: Promise<{ c?: string }>;
+}
 
-  if (!user) redirect("/login");
-
-  const { data: rows } = await supabase
-    .from("alerts")
-    .select("id, company_number, company_name, alert_type, description, seen, created_at")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
-  const alerts = rows ?? [];
-  const unseenCount = alerts.filter((a) => !a.seen).length;
+export default async function ComparePage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const initial = (sp?.c ?? "")
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
+    .slice(0, 5);
 
   return (
     <div
@@ -38,7 +31,8 @@ export default async function AlertsPage() {
         display: "flex",
         minHeight: "100vh",
         backgroundColor: "#f8fafc",
-        fontFamily: 'var(--font-plus-jakarta-sans), "Plus Jakarta Sans", sans-serif',
+        fontFamily:
+          'var(--font-plus-jakarta-sans), "Plus Jakarta Sans", sans-serif',
       }}
     >
       {/* Sidebar */}
@@ -59,7 +53,8 @@ export default async function AlertsPage() {
         <div style={{ padding: "20px", borderBottom: "1px solid #e2e8f0" }}>
           <div
             style={{
-              fontFamily: 'var(--font-instrument-serif), "Instrument Serif", serif',
+              fontFamily:
+                'var(--font-instrument-serif), "Instrument Serif", serif',
               fontSize: "20px",
               lineHeight: "1",
             }}
@@ -71,7 +66,6 @@ export default async function AlertsPage() {
 
         <nav style={{ flex: 1, paddingTop: "8px" }}>
           {NAV_ITEMS.map((item) => {
-            const active = !!item.active;
             const navStyle = {
               display: "flex",
               alignItems: "center",
@@ -79,10 +73,14 @@ export default async function AlertsPage() {
               padding: "10px 20px",
               fontSize: "13px",
               cursor: "pointer",
-              borderLeft: active ? "4px solid #4338ca" : "4px solid transparent",
-              backgroundColor: active ? "rgba(79,70,229,0.12)" : "transparent",
-              color: active ? "#4338ca" : "#475569",
-              fontWeight: active ? "600" : ("400" as const),
+              borderLeft: item.active
+                ? "4px solid #4338ca"
+                : "4px solid transparent",
+              backgroundColor: item.active
+                ? "rgba(79,70,229,0.12)"
+                : "transparent",
+              color: item.active ? "#4338ca" : "#475569",
+              fontWeight: item.active ? "600" : ("400" as const),
               textDecoration: "none",
             };
             const inner = (
@@ -114,53 +112,38 @@ export default async function AlertsPage() {
             );
           })}
         </nav>
-
-        <UserMenu email={user.email} />
       </aside>
 
       {/* Main */}
-      <main
-        style={{
-          marginLeft: "220px",
-          flex: 1,
-          padding: "28px 32px",
-          minHeight: "100vh",
-        }}
-      >
-        {/* Header */}
-        <div style={{ marginBottom: "24px" }}>
-          <h1
-            style={{
-              fontFamily: 'var(--font-instrument-serif), "Instrument Serif", serif',
-              fontSize: "26px",
-              fontWeight: "400",
-              color: "#0f172a",
-              lineHeight: "1.2",
-              marginBottom: "4px",
-            }}
-          >
-            Alerts
-          </h1>
-          <p style={{ fontSize: "13px", color: "#94a3b8", margin: 0 }}>
-            {unseenCount > 0
-              ? `${unseenCount} unread alert${unseenCount !== 1 ? "s" : ""}`
-              : "All caught up"}
-          </p>
-        </div>
-
-        {/* Alerts card */}
+      <main style={{ marginLeft: "220px", flex: 1, padding: "24px 32px" }}>
         <div
           style={{
-            backgroundColor: "#ffffff",
-            border: "1px solid #e2e8f0",
-            borderRadius: "10px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)",
-            overflow: "hidden",
-            maxWidth: "720px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "20px",
           }}
         >
-          <AlertsList initialAlerts={alerts} />
+          <div>
+            <h1
+              style={{
+                fontFamily:
+                  'var(--font-instrument-serif), "Instrument Serif", serif',
+                fontSize: "28px",
+                fontWeight: 400,
+                color: "#0f172a",
+                margin: 0,
+              }}
+            >
+              Compare companies
+            </h1>
+            <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0" }}>
+              Side-by-side intelligence across up to 5 UK companies.
+            </p>
+          </div>
+          <UserMenu />
         </div>
+        <CompareClient initialCompanyNumbers={initial} />
       </main>
     </div>
   );
