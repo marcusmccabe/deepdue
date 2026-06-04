@@ -20,6 +20,15 @@ function chAuth(): string {
   return "Basic " + Buffer.from(`${key}:`).toString("base64");
 }
 
+function formatGBP(value: number | null | undefined): string {
+  if (!value && value !== 0) return 'not disclosed';
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `£${(value / 1_000_000_000).toFixed(2)}bn`;
+  if (abs >= 1_000_000) return `£${(value / 1_000_000).toFixed(1)}m`;
+  if (abs >= 1_000) return `£${(value / 1_000).toFixed(0)}k`;
+  return `£${value.toFixed(0)}`;
+}
+
 // ── Signal derivations (mirrors AIAnalysisCard) ─────────────────────────────
 function deriveSignals(analysis: AccountsAnalysis) {
   const cp = analysis.cashPosition;
@@ -328,7 +337,7 @@ export async function POST(request: NextRequest) {
       return `=== ${c.companyName} (${c.companyNumber}) ===
 Executive Summary: ${a.executiveSummary ?? ''}
 Financial Performance: ${JSON.stringify(a.financialPerformance ?? {})}
-Financial Health: ${JSON.stringify(a.financialHealth ?? {})}
+Financial Health: Revenue ${formatGBP(a.financialHealth?.revenue?.value)} (prior year ${formatGBP(a.financialHealth?.revenue?.prior)}), YoY ${a.financialHealth?.revenue?.yoyChange ?? 'n/a'}. Net profit ${formatGBP(a.financialHealth?.netProfit?.value)}. Operating profit ${formatGBP(a.financialHealth?.operatingProfit?.value)}.
 Balance Sheet: ${JSON.stringify(a.balanceSheetStrength ?? {})}
 Cash Position: ${JSON.stringify(a.cashPosition ?? {})}
 Credit Assessment: ${JSON.stringify(a.creditAssessment ?? {})}
