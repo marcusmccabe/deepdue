@@ -159,7 +159,6 @@ interface ComparativeResponse {
     score: number;
     rationale: string;
   }>;
-  askContext: string;
 }
 
 async function callClaude(
@@ -167,7 +166,7 @@ async function callClaude(
   retry: boolean
 ): Promise<ComparativeResponse | null> {
   const system =
-    'You are a financial intelligence analyst comparing UK companies. Respond ONLY with a valid JSON object — no preamble, no markdown fences, no explanation. The JSON must match this exact shape:\n{\n  sectorStrengths: string,\n  commonWeaknesses: string,\n  inferences: string,\n  riskFlags: string,\n  competitivePositioning: string,\n  strengthRanking: [\n    {\n      companyNumber: string,\n      companyName: string,\n      score: number,\n      rationale: string\n    }\n  ],\n  askContext: string\n}\nstrengthRanking must be ordered best to worst. score is 0-100. Each string field is 2-3 sentences maximum. askContext is a one-paragraph summary of all companies for use as AI chat context.' +
+    'You are a financial intelligence analyst comparing UK companies. Respond ONLY with a valid JSON object — no preamble, no markdown fences, no explanation. The JSON must match this exact shape:\n{\n  sectorStrengths: string,\n  commonWeaknesses: string,\n  inferences: string,\n  riskFlags: string,\n  competitivePositioning: string,\n  strengthRanking: [\n    {\n      companyNumber: string,\n      companyName: string,\n      score: number,\n      rationale: string\n    }\n  ]\n}\nstrengthRanking must be ordered best to worst. score is 0-100. Each string field is 2-3 sentences maximum.' +
     (retry ? "\n\nReturn only raw JSON, nothing else." : "");
 
   const payload = companies.map((c) => ({
@@ -324,6 +323,22 @@ export async function POST(request: NextRequest) {
       competitivePositioning: comparative.competitivePositioning,
       strengthRanking: comparative.strengthRanking,
     },
-    askContext: comparative.askContext,
+    askContext: enriched.map((c) => {
+      const a = c.analysis;
+      return `=== ${c.companyName} (${c.companyNumber}) ===
+Executive Summary: ${a.executiveSummary ?? ''}
+Financial Performance: ${JSON.stringify(a.financialPerformance ?? {})}
+Financial Health: ${JSON.stringify(a.financialHealth ?? {})}
+Balance Sheet: ${JSON.stringify(a.balanceSheetStrength ?? {})}
+Cash Position: ${JSON.stringify(a.cashPosition ?? {})}
+Credit Assessment: ${JSON.stringify(a.creditAssessment ?? {})}
+Key Risks: ${JSON.stringify(a.keyRisks ?? {})}
+Red Flags: ${JSON.stringify(a.redFlags ?? [])}
+Management Commentary: ${JSON.stringify(a.managementCommentary ?? {})}
+Auditor & Going Concern: ${JSON.stringify(a.auditorAndGoingConcern ?? {})}
+Related Party Transactions: ${JSON.stringify(a.relatedPartyTransactions ?? {})}
+Strategic Direction: ${JSON.stringify(a.strategicDirection ?? {})}
+Filing Behaviour: ${JSON.stringify(a.filingBehaviour ?? {})}`;
+    }).join('\n\n'),
   });
 }
