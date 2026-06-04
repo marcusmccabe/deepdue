@@ -125,6 +125,8 @@ export default function CompareClient({
   >(() =>
     initialCompanyNumbers.map((n) => ({ companyNumber: n, companyName: n }))
   );
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
 
   // Search state
   const [query, setQuery] = useState("");
@@ -141,6 +143,7 @@ export default function CompareClient({
   const [askContext, setAskContext] = useState<string>("");
   const [intelLoading, setIntelLoading] = useState(false);
   const [pendingAnalysis, setPendingAnalysis] = useState<string[]>([]);
+  const [analysisProgress, setAnalysisProgress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Ask bar state
@@ -272,14 +275,15 @@ export default function CompareClient({
             setPendingAnalysis(missing);
             // First time we see missing → trigger analysis for each
             if (attempts === 0) {
-              await Promise.all(
-                missing.map((num) =>
-                  fetch(
-                    `/api/analyse-accounts?companyNumber=${encodeURIComponent(num)}`,
-                    { cache: "no-store" }
-                  ).catch(() => null)
-                )
-              );
+              for (const num of missing) {
+                const companyName = selectedRef.current.find(s => s.companyNumber === num)?.companyName ?? num;
+                setAnalysisProgress(`Analysing ${companyName}…`);
+                await fetch(
+                  `/api/analyse-accounts?companyNumber=${encodeURIComponent(num)}`,
+                  { cache: "no-store" }
+                ).catch(() => null);
+              }
+              setAnalysisProgress(null);
             } else {
               // poll wait
               await new Promise((r) => setTimeout(r, 4000));
@@ -643,6 +647,17 @@ export default function CompareClient({
               </div>
             );
           })}
+          {analysisProgress && (
+            <div
+              style={{
+                fontSize: "12px",
+                color: COLOR.indigo,
+                paddingTop: "4px",
+              }}
+            >
+              {analysisProgress}
+            </div>
+          )}
         </div>
       )}
 
